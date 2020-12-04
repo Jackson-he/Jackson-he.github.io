@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+  <style>
+    body {
+      text-align: center;
+    }
+    button {
+      line-height: 1.5715;
+      position: relative;
+      display: inline-block;
+      font-weight: 400;
+      white-space: nowrap;
+      text-align: center;
+      background-image: none;
+      -webkit-box-shadow: 0 2px 0 rgba(0,0,0,.015);
+      box-shadow: 0 2px 0 rgba(0,0,0,.015);
+      cursor: pointer;
+      -webkit-transition: all .3s cubic-bezier(.645,.045,.355,1);
+      transition: all .3s cubic-bezier(.645,.045,.355,1);
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      -ms-touch-action: manipulation;
+      touch-action: manipulation;
+      height: 32px;
+      padding: 4px 15px;
+      font-size: 14px;
+      border-radius: 2px;
+      color: rgba(0,0,0,.85);
+      background: #fff;
+      border: 1px solid #d9d9d9;
+    }
+    input {
+      -webkit-box-sizing: border-box;
+      box-sizing: border-box;
+      margin: 0;
+      font-variant: tabular-nums;
+      list-style: none;
+      -webkit-font-feature-settings: "tnum";
+      font-feature-settings: "tnum";
+      position: relative;
+      display: inline-block;
+      width: 100px;
+      min-width: 0;
+      padding: 4px 11px;
+      color: rgba(0,0,0,.85);
+      font-size: 14px;
+      line-height: 1.5715;
+      background-color: #fff;
+      background-image: none;
+      border: 1px solid #d9d9d9;
+      border-radius: 2px;
+      -webkit-transition: all .3s;
+      transition: all .3s;
+    }
+    #start {
+      border-radius: 50%;
+    }
+    #reset {
+      border-radius: 50%;
+    }
+  </style>
+</head>
+<body>
+  <h1>智能灯光语音提示</h1>
+  <div>
+    <!-- <div>
+        <label>播放倍速：</label>
+        <input type="text" id="rateInput" placeholder="请输入播放倍速">
+    </div> -->
+    <div style="margin-bottom: 20px">
+        <label>每条语音提示的间隔时间：</label>
+        <input type="text" id="durationInput" placeholder="请输入间隔时间">秒
+    </div>
+    <div>
+        <button id="start">开始</button>
+        <button id="reset">重置</button>
+        <button id="shuffle">生成新的播放顺序</button>
+    </div>
+    
+  </div>
+</body>
+<script>
+  class AudioControl {
+    constructor(srcArray = [], maxMum = 3, duration = 0) {
+      this.totalArray = srcArray; // 所有播放资源路径数组
+      this.playArray = []; // 当前播放数组
+      this.playbackRate = 1; // 播放速率
+      this.maxMum = maxMum; // 最大播放量
+      this.randomMap = {}; // 数组唯一索引字典
+      this.playIndex = 0; // 当前播放到第几条
+      this.audioEle = null;
+      this.playEle = null;
+      this.resetEle = null;
+      this.shuffleEle = null;
+      this.duration = duration;
+      this.playStatus = 0; // 0 暂停|未开始 1 播放中
+      this.init();
+    }
+    // 获取两个值之间的随机值
+    getRandomIntInclusive(min, max) {
+      min = Math.ceil(min);
+      max = Math.floor(max);
+      return Math.floor(Math.random() * (max - min + 1)) + min; //含最大值，含最小值 
+    }
+    // 从一个数组中随机获取一个不重复的下标
+    getUniqRandomNumOfArray() {
+      const result = [];
+      const randomNum = this.getRandomIntInclusive(0, this.totalArray.length - 1);
+      
+      if (this.randomMap[randomNum] === undefined) {
+        this.randomMap[randomNum] = randomNum
+        return randomNum;
+      }
+      return this.randomMap[randomNum] === undefined ? this.randomMap[randomNum] = randomNum : this.getUniqRandomNumOfArray();
+    }
+    // 生成待播放的数组
+    generatePlayArray() {
+      this.randomMap = {};
+      const result = new Array(this.maxMum);
+      for (let i = 0; i < this.maxMum; i++) {
+        const index = this.getUniqRandomNumOfArray();
+        
+        result[i] = this.totalArray[index];
+      }
+      console.log('play array ', result);
+      
+      return result;
+    }
+    // 替换播放流
+    changeAudioSource(target, newSource) {
+      target.setAttribute('src', newSource);
+    }
+    // 创建播放标签
+    creatAudioTag(src) {
+      const audioDom = document.createElement('audio');
+      audioDom.setAttribute('src', src);
+      audioDom.setAttribute('id', 'audio');
+      return audioDom;
+    }
+    // 插入播放节点到DOM中
+    generateAudio() {
+      const audioEle = this.creatAudioTag();
+      document.body.appendChild(audioEle);
+    }
+    // 播放/暂停
+    startPlay() {
+      if (this.audioEle.paused) {
+        this.audioEle.play();
+        this.startEle.innerText = '暂停';
+      } else {
+        this.audioEle.pause();
+        this.startEle.innerText = '继续';
+      }
+    }
+    // 播放下一条语音
+    playNext() {
+      this.changeAudioSource(this.audioEle, this.playArray[this.playIndex]);
+      this.startPlay();
+    }
+    // 重置播放流
+    resetPlay() {
+      this.audioEle.load();
+      this.resetStartBtn();
+    }
+    // 重置待播放源数组
+    shuffleArray() {
+      this.playArrayReady();
+      this.resetPlay();
+    }
+    // 复位语音流
+    resetAudio() {
+      this.playIndex = 0;
+      this.changeAudioSource(this.audioEle, this.playArray[0]);
+    }
+    // 复位开始按钮
+    resetStartBtn() {
+      this.playStatus = 0;
+      this.startEle.innerText = '开始';
+      this.resetAudio();
+    }
+    // 一条语音结束之后
+    playOneEnded() {
+      if (this.playIndex < this.playArray.length - 1) {
+        this.playIndex++;
+        setTimeout(() => {
+          this.playNext();
+        }, this.duration * 1000)
+      } else {
+        this.resetStartBtn();
+        console.log('play ended');
+      }
+    }
+    // 准备待播放源
+    playArrayReady() {
+      this.playArray = this.generatePlayArray();
+    }
+    setRate(e) {
+      console.log(e.target.value);
+      
+      this.audioEle.playbackRate = e.target.value || 1;
+    }
+    // 设置播放间隔
+    setDuration(e) {
+      this.duration = e.target.value;
+    }
+    eventInit() {
+      // 点击【开始】按钮
+      this.startEle.addEventListener('click', this.startPlay.bind(this));
+      // 点击【重置】按钮
+      this.resetEle.addEventListener('click', this.resetPlay.bind(this));
+      // 点击【打乱播放顺序】按钮
+      this.shuffleEle.addEventListener('click', this.shuffleArray.bind(this));
+      // 播放一条语音完成后的回调
+      this.audioEle.addEventListener('ended', this.playOneEnded.bind(this));
+      // 设置播放间隔
+      this.durationInputEle.addEventListener('blur', this.setDuration.bind(this));
+    }
+    elementInit() {
+      this.audioEle = document.getElementById('audio');
+      
+      this.startEle = document.getElementById('start');
+      this.resetEle = document.getElementById('reset');
+      this.shuffleEle = document.getElementById('shuffle');
+      this.rateInputEle = document.getElementById('rateInput');
+      this.durationInputEle = document.getElementById('durationInput');
+    }
+    init() {
+      this.playArrayReady();
+      this.generateAudio();
+      this.elementInit();
+      this.eventInit();
+      this.resetStartBtn();
+    }
+  }
+
+  const total = [];
+
+  for(let i = 1; i < 17; i++) {
+    total.push(`./${i}.mp3`);
+  }
+
+  const AudioControlInstance = new AudioControl(total, 5, 2);
+
+  // document.addEventListener('DOMContentLoaded', function () {
+  //   document.getElementById('2').playbackRate = 3
+  // })
+
+</script>
+</html>
