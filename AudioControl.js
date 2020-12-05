@@ -101,10 +101,11 @@ class AudioControl {
   // 一条语音结束之后
   playOneEnded() {
     if (this.playIndex < this.playArray.length - 1) {
-      this.playIndex++;
       setTimeout(() => {
         this.playNext();
-      }, this.duration * 1000)
+      }, this.playIndex === 0 ? 0 : this.duration * 1000);
+
+      this.playIndex++;
     } else {
       this.resetStartBtn();
       console.log('play ended');
@@ -134,7 +135,6 @@ class AudioControl {
       
       return [...result, this.createListTag(this.nameMap[targetName])];
     }, []);
-    console.log(listNodesArray);
     
     const wrapper = document.getElementById('list-wrapper');
 
