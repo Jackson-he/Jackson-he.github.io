@@ -1,162 +1,78 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <meta http-equiv="X-UA-Compatible" content="ie=edge">
-  <title>驾考灯光</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>送给丁老师的礼物</title>
   <style>
     body {
-      text-align: center;
-    }
-    button {
-      line-height: 1.5715;
-      position: relative;
-      display: inline-block;
-      font-weight: 400;
-      white-space: nowrap;
-      text-align: center;
-      background-image: none;
-      -webkit-box-shadow: 0 2px 0 rgba(0,0,0,.015);
-      box-shadow: 0 2px 0 rgba(0,0,0,.015);
-      cursor: pointer;
-      -webkit-transition: all .3s cubic-bezier(.645,.045,.355,1);
-      transition: all .3s cubic-bezier(.645,.045,.355,1);
-      -webkit-user-select: none;
-      -moz-user-select: none;
-      -ms-user-select: none;
-      user-select: none;
-      -ms-touch-action: manipulation;
-      touch-action: manipulation;
-      height: 32px;
-      padding: 4px 15px;
-      font-size: 14px;
-      border-radius: 2px;
-      color: rgba(0,0,0,.85);
-      background: #fff;
-      border: 1px solid #d9d9d9;
-    }
-    input {
-      -webkit-box-sizing: border-box;
-      box-sizing: border-box;
+      height: 100vh;
+      padding: 0;
       margin: 0;
-      font-variant: tabular-nums;
-      list-style: none;
-      -webkit-font-feature-settings: "tnum";
-      font-feature-settings: "tnum";
-      position: relative;
-      display: inline-block;
-      width: 100px;
-      min-width: 0;
-      padding: 4px 11px;
-      color: rgba(0,0,0,.85);
-      font-size: 14px;
-      line-height: 1.5715;
-      background-color: #fff;
-      background-image: none;
-      border: 1px solid #d9d9d9;
-      border-radius: 2px;
-      -webkit-transition: all .3s;
-      transition: all .3s;
     }
-    #start {
-      width: 70px;
-      height: 70px;
-      line-height: 70px;
-      display: inline-block;
-      border-radius: 50%;
-      background-color: #fff;
-      background-image: none;
-      border: 1px solid #d9d9d9;
+
+    #birthday-check, #video-part {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
     }
-    #reset {
-      width: 70px;
-      height: 70px;
-      line-height: 70px;
-      display: inline-block;
-      border-radius: 50%;
-      background-color: #fff;
-      background-image: none;
-      border: 1px solid #d9d9d9;
+
+    .birthday {
+      width: 50px;
+      height: 50px;
+      text-align: center;
     }
-    .btn-wrapper {
-      display: inline-block;
-      background-color: #fff;
-      background-image: none;
-      border: 1px solid #d9d9d9;
-      padding: 2px;
-      border-radius: 50%;
+
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      border-radius: 12px;
     }
-    .play-list {
-      padding: 0 20px;
+    video {
+      width: 100%;
     }
-    #list-wrapper p {
-      padding-bottom: 2px;
-      border-bottom: 1px solid #d9d9d9;
+    .hide {
+      display: none!important;
     }
   </style>
 </head>
+
 <body>
-  <h1>随机灯光语音提示</h1>
-  <div>
-    <!-- <div>
-        <label>播放倍速：</label>
-        <input type="text" id="rateInput" placeholder="请输入播放倍速">
-    </div> -->
-    <div style="margin-bottom: 20px">
-        <label>每条语音提示的间隔时间：</label>
-        <input type="text" id="durationInput" placeholder="请输入间隔时间" value="0"> 秒
-    </div>
+  <div id="birthday-check">
+    <p>请输入何绪杰女朋友的生日(如0808)</p>
     <div>
-        <div class="btn-wrapper">
-            <div id="start">播放</div>
-        </div>
-        <div class="btn-wrapper">
-            <div id="reset">重置</div>
-        </div>
-        
-        <button id="shuffle">生成新的播放顺序</button>
+      <input type="text" class="birthday" maxlength="1" placeholder="月">
+      <input type="text" class="birthday" maxlength="1" placeholder="月">
+      <input type="text" class="birthday" maxlength="1" placeholder="日">
+      <input type="text" class="birthday" maxlength="1" placeholder="日">
     </div>
-    <div class="play-list">
-      <h3>语音播放列表</h3>
-      <div id="list-wrapper"></div>
-    </div>
+    <button onclick="go()">Open it!</button>
+  </div>
+  <div id="video-part" class="hide">
+    <video controls="" width="250">
+      <!-- <source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4"> -->
+      <source src="./dq.mp4" type="video/mp4">
+  </video>
   </div>
 </body>
-<script src="./AudioControl.js"></script>
 
 <script>
-  const map = {
-    '1': '夜间通过急弯、坡路',
-    '2': '夜间通过坡路、拱桥',
-    '3': '夜间通过拱桥、人行横道',
-    '4': '夜间通过没有交通信号灯控制的路口',
-    '5': '夜间超越前方车辆',
-    '6': '夜间在窄路与非机动车会车',
-    '7': '夜间同方向近距离跟车行驶',
-    '8': '夜间在窄桥与非机动车会车',
-    '9': '夜间与机动车会车',
-    '10': '夜间在照明良好的道路上行驶',
-    '11': '夜间通过坡路、拱桥',
-    '12': '请打开近光灯',
-    '13': '夜间直行通过路口',
-    '14': '夜间在有路灯的道路上行驶',
-    '15': '请打开远光灯',
-    '16': '夜间在没有路灯，照明不良条件下行驶',
+  function go () {
+    const inputArray = document.getElementsByClassName('birthday');
+    const valueArray = Array.from(inputArray).map(item => item.value);
+
+    if (valueArray[0] == '0' && valueArray[1] == '6' && valueArray[2] == '3' && valueArray[3] == '0') {
+      const videoElement = document.getElementById('video-part');
+      const birthdayElement = document.getElementById('birthday-check');
+      birthdayElement.classList.add('hide');
+      videoElement.classList.remove('hide');
+    }
+
   }
-
-  const total = Object.keys(map).reduce((result, current) => [...result, `./${current}.mp3`], []);
-
-  const AudioControlInstance = new AudioControl({
-    srcArray: total, 
-    maxMum: 5, 
-    duration: 0,
-    nameMap: map,
-  });
-
-  // document.addEventListener('DOMContentLoaded', function () {
-  //   document.getElementById('2').playbackRate = 3
-  // })
-
 </script>
+
 </html>
