@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0">
   <title>送给丁老师的礼物</title>
   <style>
     body {
@@ -38,6 +38,9 @@
     .hide {
       display: none!important;
     }
+    .hide-back {
+      visibility: hidden;
+    }
   </style>
 </head>
 
@@ -52,8 +55,8 @@
     </div>
     <button onclick="go()">Open it!</button>
   </div>
-  <div id="video-part" class="hide">
-    <video controls="" width="250">
+  <div id="video-part" class="hide-back">
+    <video controls="" width="250" preload="load">
       <!-- <source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4"> -->
       <source src="./dq1.mp4" type="video/mp4">
   </video>
@@ -71,7 +74,6 @@
       birthdayElement.classList.add('hide');
       videoElement.classList.remove('hide');
     }
-
   }
 </script>
 
