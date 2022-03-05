@@ -11,9 +11,12 @@
       height: 100vh;
       padding: 0;
       margin: 0;
+      background: linear-gradient(to bottom left, #009688 50%, palegoldenrod 50%);
+      
     }
 
-    #birthday-check, #video-part {
+    #birthday-check,
+    #video-part {
       height: 100%;
       display: flex;
       flex-direction: column;
@@ -25,19 +28,25 @@
       width: 50px;
       height: 50px;
       text-align: center;
+      background: transparent;
     }
 
     button {
       margin-top: 20px;
       padding: 10px 20px;
       border-radius: 12px;
+      background: content-box;
+      border-color: darkblue;
     }
+
     video {
       width: 100%;
     }
+
     .hide {
-      display: none!important;
+      display: none !important;
     }
+
     .hide-back {
       visibility: hidden;
     }
@@ -59,12 +68,28 @@
     <video controls="" width="250" preload="load">
       <!-- <source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4"> -->
       <source src="./dq1.mp4" type="video/mp4">
-  </video>
+    </video>
   </div>
 </body>
 
 <script>
-  function go () {
+  document.addEventListener('DOMContentLoaded', function () {
+    const inputArray = document.getElementsByClassName('birthday');
+    inputArray[0].addEventListener('input', (e) => {
+      inputArray[1].focus?.();
+    });
+    inputArray[1].addEventListener('input', (e) => {
+      inputArray[2].focus?.();
+    });
+    inputArray[2].addEventListener('input', (e) => {
+      inputArray[3].focus?.();
+    });
+    inputArray[3].addEventListener('input', (e) => {
+      inputArray[3].blur?.();
+    });
+  });
+
+  function go() {
     const inputArray = document.getElementsByClassName('birthday');
     const valueArray = Array.from(inputArray).map(item => item.value);
 
@@ -72,7 +97,7 @@
       const videoElement = document.getElementById('video-part');
       const birthdayElement = document.getElementById('birthday-check');
       birthdayElement.classList.add('hide');
-      videoElement.classList.remove('hide');
+      videoElement.classList.remove('hide-back');
     }
   }
 </script>
