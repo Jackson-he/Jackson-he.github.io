@@ -11,7 +11,8 @@
       height: 100vh;
       padding: 0;
       margin: 0;
-      background: linear-gradient(to bottom left, #009688 50%, palegoldenrod 50%);
+      /* background: linear-gradient(to bottom left, #009688 50%, palegoldenrod 50%); */
+      background: linear-gradient(to bottom left, #009688 50%, rgb(245 202 212) 50%);
       overflow: hidden;
     }
 
@@ -53,6 +54,15 @@
     #txt {
       font-family: -webkit-pictograph;
       padding: 10px;
+      /* border: 1px solid lightcyan; */
+      margin: 10px;
+      border-radius: 5px;
+    }
+    #img {
+      position: absolute;
+      left: 100px;
+      top: 505px;
+      z-index: -10;
     }
   </style>
 </head>
@@ -73,13 +83,13 @@
       <!-- <source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4"> -->
       <source src="https://love--dq.oss-cn-shenzhen.aliyuncs.com/dq.mp4" type="video/mp4">
     </video>
-    <div id="txt" class="hide-back">
+    <div id="txt" class="hide">
       <p>亲爱的，时间比较紧，做的比较粗糙，请见谅有很多说的不好的地方。这次是跟你学的一镜到底，虽然录了很多遍，但还是有很多瑕疵，可没关系，你只要明白一个点就好，就是我很喜欢你，我想和你在一起，陪你走过漫长岁月。</p>
       <p style="text-align: right;">爱你的</p>
       <p style="text-align: right;">何绪杰</p>
     </div>
   </div>
-
+  <img src="./flower.png" alt="" id="img" class="">
 </body>
 
 <script>
@@ -102,7 +112,8 @@
 
     elem.onended = function (event) {
       elem.classList.add('hide');
-      document.getElementById('txt').classList.remove('hide-back');
+      document.getElementById('txt').classList.remove('hide');
+      document.getElementById('img').classList.remove('hide');
     };
   });
 
