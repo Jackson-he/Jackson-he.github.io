@@ -51,6 +51,7 @@
     .hide-back {
       visibility: hidden;
     }
+
     #txt {
       font-family: -webkit-pictograph;
       padding: 10px;
@@ -58,76 +59,60 @@
       margin: 10px;
       border-radius: 5px;
     }
+
     #img {
       position: absolute;
       left: 100px;
       top: 505px;
       z-index: -10;
     }
+
+    #time {
+      font-size: 40px;
+      color: lightpink;
+    }
   </style>
 </head>
 
 <body>
   <div id="birthday-check">
-    <p>揣测一下何绪杰女朋友的生日吧(如0808)</p>
-    <div>
-      <input type="number" class="birthday" maxlength="1" placeholder="月">
-      <input type="number" class="birthday" maxlength="1" placeholder="月">
-      <input type="number" class="birthday" maxlength="1" placeholder="日">
-      <input type="number" class="birthday" maxlength="1" placeholder="日">
-    </div>
-    <button onclick="go()">Open it!</button>
+    <p>我们在一起的第<span id="time"></span>天</p>
   </div>
-  <div id="video-part">
-    <video controls="" preload="auto" class="hide-back">
-      <!-- <source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4"> -->
-      <source src="https://love--dq.oss-cn-shenzhen.aliyuncs.com/dq.mp4" type="video/mp4">
-    </video>
-    <div id="txt" class="hide">
-      <p>亲爱的，时间比较紧，做的比较粗糙，请见谅有很多说的不好的地方。这次是跟你学的一镜到底，虽然录了很多遍，但还是有很多瑕疵，可没关系，你只要明白一个点就好，就是我很喜欢你，我想和你在一起，陪你走过漫长岁月。</p>
-      <p style="text-align: right;">爱你的</p>
-      <p style="text-align: right;">何绪杰</p>
-    </div>
-  </div>
+
   <img src="./flower.png" alt="" id="img" class="">
 </body>
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    const inputArray = document.getElementsByClassName('birthday');
-    inputArray[0].addEventListener('input', (e) => {
-      inputArray[1].focus?.();
-    });
-    inputArray[1].addEventListener('input', (e) => {
-      inputArray[2].focus?.();
-    });
-    inputArray[2].addEventListener('input', (e) => {
-      inputArray[3].focus?.();
-    });
-    inputArray[3].addEventListener('input', (e) => {
-      inputArray[3].blur?.();
-    });
+    const firstDay = new Date('2022-03-07').getTime();
+    const now = new Date().getTime();
+    const way = Math.floor((now - firstDay) / 1000 / 60 / 60 / 24) + 1;
 
-    var elem = document.querySelector("video");
+    const element = document.getElementById('time');
+    let start, previousTimeStamp;
+    let done = false
 
-    elem.onended = function (event) {
-      elem.classList.add('hide');
-      document.getElementById('txt').classList.remove('hide');
-      document.getElementById('img').classList.remove('hide');
-    };
-  });
+    function step(timestamp) {
+      if (start === undefined) {
+        start = timestamp;
+      }
+      const elapsed = timestamp - start;
 
-  function go() {
-    const inputArray = document.getElementsByClassName('birthday');
-    const valueArray = Array.from(inputArray).map(item => item.value);
+      if (previousTimeStamp !== timestamp) {
+        // Math.min() is used here to make sure the element stops at exactly 200px
+        const count = Math.min(0.1 * elapsed, 200);
+        element.innerText = way;
+        if (count === 200) done = true;
+      }
 
-    if (valueArray[0] == '0' && valueArray[1] == '6' && valueArray[2] == '3' && valueArray[3] == '0') {
-      const videoElement = document.getElementsByTagName('video')[0];
-      const birthdayElement = document.getElementById('birthday-check');
-      birthdayElement.classList.add('hide');
-      videoElement.classList.remove('hide-back');
+      if (elapsed < 2000) { // Stop the animation after 2 seconds
+        previousTimeStamp = timestamp
+        !done && window.requestAnimationFrame(step);
+      }
     }
-  }
+
+    window.requestAnimationFrame(step);
+  });
 </script>
 
 </html>
