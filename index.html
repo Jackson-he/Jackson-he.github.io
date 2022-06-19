@@ -76,7 +76,8 @@
 
 <body>
   <div id="birthday-check">
-    <p>我们在一起的第<span id="time"></span>天</p>
+    THE END...
+    <!-- <p>我们在一起的第<span id="time"></span>天</p> -->
   </div>
 
   <img src="./flower.png" alt="" id="img" class="">
@@ -89,7 +90,7 @@
     const way = Math.floor((now - firstDay) / 1000 / 60 / 60 / 24) + 1;
 
     const element = document.getElementById('time');
-    let start, previousTimeStamp;
+    let start, previousWay;
     let done = false
 
     function step(timestamp) {
