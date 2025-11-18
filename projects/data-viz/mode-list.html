@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">模式列表 - 英语积累系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .back-home {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50px;
+            text-decoration: none;
+            color: #667eea;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .back-home:hover {
+            background: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding-top: 60px;
+        }
+
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .header-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .header-title {
+            font-size: 2rem;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .header-description {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .patterns-list {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .pattern-item {
+            padding: 20px;
+            border-bottom: 1px solid #e5e7eb;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .pattern-item:last-child {
+            border-bottom: none;
+        }
+
+        .pattern-item:hover {
+            background: #f9fafb;
+            transform: translateX(5px);
+        }
+
+        .pattern-formula {
+            font-family: 'Courier New', monospace;
+            font-size: 1.2rem;
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .pattern-function {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .pattern-link {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                padding: 25px;
+            }
+
+            .header-title {
+                font-size: 1.5rem;
+            }
+
+            .patterns-list {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-home">← 返回模式列表</a>
+    
+    <div class="container">
+        <div class="header">
+            <div class="header-icon" id="modeIcon"></div>
+            <h1 class="header-title" id="modeTitle"></h1>
+            <p class="header-description" id="modeDescription"></p>
+        </div>
+
+        <div class="patterns-list" id="patternsList"></div>
+    </div>
+
+    <script src="data.js"></script>
+    <script>
+        // 从 URL 获取模式 ID
+        const urlParams = new URLSearchParams(window.location.search);
+        const modeId = urlParams.get('mode') || 'mode1';
+
+        // 加载对应模式的数据
+        const modeData = modesData[modeId];
+
+        if (modeData) {
+            document.getElementById('pageTitle').textContent = `${modeData.title} - 英语积累系统`;
+            document.getElementById('modeIcon').textContent = modeData.icon;
+            document.getElementById('modeTitle').textContent = modeData.title;
+            document.getElementById('modeDescription').textContent = modeData.description;
+
+            const patternsList = document.getElementById('patternsList');
+            modeData.patterns.forEach((pattern, index) => {
+                const patternItem = document.createElement('a');
+                patternItem.className = 'pattern-link';
+                patternItem.href = `pattern-detail.html?mode=${modeId}&pattern=${index}`;
+                
+                patternItem.innerHTML = `
+                    <div class="pattern-item">
+                        <div class="pattern-formula">${pattern.formula}</div>
+                        <div class="pattern-function">${pattern.function}</div>
+                    </div>
+                `;
+                
+                patternsList.appendChild(patternItem);
+            });
+        }
+    </script>
+</body>
+</html>
+
