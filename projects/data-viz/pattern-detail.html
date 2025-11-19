@@ -190,10 +190,28 @@
             document.getElementById('patternFunction').textContent = pattern.function;
 
             const examplesList = document.getElementById('examplesList');
+
+            // 从 formula 中提取关键词（去除 S+V, N 等占位符）
+            const formulaKeywords = pattern.formula
+                .replace(/S\+V\.?/g, '')
+                .replace(/\[.*?\]/g, '')
+                .replace(/N\.?/g, '')
+                .split(/[,\s]+/)
+                .filter(word => word.length > 2 && /^[A-Za-z]+$/.test(word));
+
             pattern.examples.forEach((example, index) => {
                 const li = document.createElement('li');
                 li.className = 'example-item';
-                li.innerHTML = `<span class="example-number">${index + 1}</span>${example}`;
+
+                let formattedExample = example;
+
+                // 将 formula 中的关键词在例句中加粗
+                formulaKeywords.forEach(keyword => {
+                    const regex = new RegExp(`\\b(${keyword})\\b`, 'gi');
+                    formattedExample = formattedExample.replace(regex, '<strong>$1</strong>');
+                });
+
+                li.innerHTML = `<span class="example-number">${index + 1}</span>${formattedExample}`;
                 examplesList.appendChild(li);
             });
         }
