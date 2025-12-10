@@ -9,44 +9,44 @@ const modesData = {
                 formula: 'Furthermore, S+V.',
                 function: '递进。含义：此外，而且（正式）',
                 examples: [
-                    'We have solved the immediate crisis; furthermore, we need a long-term plan.',
-                    '[商业分析]The first quarter sales exceeded expectations. Furthermore, customer satisfaction ratings reached an all-time high.',
-                    '[学术论文/论证]The proposed policy significantly reduces carbon emissions. Furthermore, it is estimated to create thousands of new jobs in the renewable sector.',
-                    '[技术说明]The software update fixed several critical security vulnerabilities. Furthermore, the user interface was significantly simplified, improving accessibility.',
-                    '[社会评论/新闻]The government has pledged to increase funding for public schools. Furthermore, they are introducing new training programs for early career teachers.',
+                    'The restaurant has great food. Furthermore, the service is excellent.',
+                    'I enjoy reading books. Furthermore, it helps me relax after work.',
+                    'This phone has a good camera. Furthermore, the battery lasts all day.',
+                    'She is a talented singer. Furthermore, she writes her own songs.',
+                    'The apartment is close to my office. Furthermore, the rent is affordable.'
                 ]
             },
             {
                 formula: 'Moreover, S+V.',
                 function: '递进。含义：此外，再者（更正式）',
                 examples: [
-                    'The research is flawed; moreover, the data collection process was questionable.',
-                    '[管理报告]The company must address the issue of employee burnout in the coming quarter. Moreover, the recent turnover rate is approaching a critical threshold.',
-                    '[法律/政策分析]The treaty aims to strengthen international cooperation on trade. Moreover, it includes specific provisions for protecting intellectual property rights.',
-                    '[环境科学]The deforestation has severely impacted local biodiversity. Moreover, the lack of tree cover has exacerbated soil erosion across the region.',
-                    '[历史/社会学]The invention of the printing press revolutionized the spread of knowledge. Moreover, it played a pivotal role in the acceleration of the Renaissance.',
+                    'The weather is perfect today. Moreover, we have no plans, so we can go anywhere.',
+                    'He is always on time. Moreover, he never complains about extra work.',
+                    'The movie was entertaining. Moreover, it had a meaningful message.',
+                    'This coffee shop is cozy. Moreover, they serve the best pastries in town.',
+                    'Learning a new language is challenging. Moreover, it requires daily practice.'
                 ]
             },
             {
                 formula: 'That being said, S+V.',
                 function: '转折/让步。话虽如此；尽管那样（口语高频）',
                 examples: [
-                    'The project has many challenges. That being said, we are confident in our ability to deliver.',
-                    'The data shows a decline in sales. That being said, our market share has actually increased.',
+                    'The hotel is a bit expensive. That being said, the location is perfect.',
+                    'I love pizza. That being said, I try not to eat it too often.',
                     "It’s a great idea. That being said, we don't have the budget for it.",
-                    '[日常讨论/评价]The movie received widespread critical acclaim for its cinematography. That being said, the plot was overly complex and difficult to follow.',
-                    '[招聘/决策讨论]Candidate A has impressive experience and a strong skill set. That being said, her salary expectations are significantly higher than our budget allows.'
+                    'She can be difficult sometimes. That being said, she is a loyal friend.',
+                    'The class is challenging. That being said, I am learning a lot.'
                 ]
             },
             {
                 formula: 'In contrast to N, S+V.',
                 function: '对比。与...形成对比的是',
                 examples: [
-                    'In contrast to the previous study, this one shows no significant change.',
-                    '[经济/市场分析]In contrast to the stagnant European markets, the Asian technology sector has experienced aggressive growth this year.',
-                    '[教育/学习方法]In contrast to rote memorization, contextual learning fosters deeper understanding and better retention.',
-                    "[文学/艺术评论]In contrast to the vivid colors of the earlier paintings, the artist's later works are characterized by their muted and somber tones.",
-                    '[技术/产品对比]In contrast to the heavy, corded vacuums of the past, the new model is entirely wireless and significantly lighter.',
+                    'In contrast to my brother, I prefer staying home on weekends.',
+                    'In contrast to last year, this summer has been much cooler.',
+                    'In contrast to coffee, tea helps me sleep better.',
+                    'In contrast to the book, the movie was disappointing.',
+                    'In contrast to her sister, she is very outgoing.',
                 ]
             },
             {
