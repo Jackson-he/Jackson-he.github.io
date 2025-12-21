@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>创意设计 - Jackson He</title>
+    <title>赛事预测查询 - Sport Prediction</title>
     <style>
         * {
             margin: 0;
@@ -12,38 +12,269 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: white;
             padding: 2rem;
+            color: #333;
         }
 
         .container {
-            max-width: 800px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
             text-align: center;
-        }
-
-        h1 {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            animation: fadeInDown 0.8s ease-out;
-        }
-
-        p {
-            font-size: 1.2rem;
+            color: white;
             margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
             opacity: 0.9;
-            animation: fadeInUp 0.8s ease-out;
+            font-size: 1.1rem;
+        }
+
+        .api-config {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .api-config input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .api-config label {
+            font-weight: 600;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .btn-info {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #667eea;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 1rem;
+            border-radius: 5px;
+            margin: 1rem 0;
+        }
+
+        .match-item {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .match-item:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .match-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .match-teams {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .match-league {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .match-time {
+            color: #999;
+            font-size: 0.85rem;
+        }
+
+        .prediction-info {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #eee;
+        }
+
+        .prediction-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+
+        .prediction-label {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .prediction-value {
+            color: #333;
+        }
+
+        .confidence {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .confidence-high {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .confidence-medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .confidence-low {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .recommendation-section {
+            margin-top: 1.5rem;
+        }
+
+        .recommendation-type {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.75rem;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        .recommendation-matches {
+            margin-top: 1rem;
+        }
+
+        .score-options {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .score-option {
+            background: #f8f9fa;
+            padding: 0.75rem;
+            border-radius: 5px;
+            text-align: center;
+            border: 2px solid #ddd;
+        }
+
+        .score-option.high {
+            border-color: #28a745;
+            background: #d4edda;
         }
 
         .back-link {
             display: inline-block;
-            padding: 1rem 2rem;
+            margin-top: 2rem;
+            padding: 0.75rem 1.5rem;
             background: rgba(255, 255, 255, 0.2);
             border: 2px solid white;
             border-radius: 50px;
@@ -51,60 +282,1055 @@
             text-decoration: none;
             font-weight: 600;
             transition: all 0.3s ease;
-            animation: fadeInUp 1s ease-out;
         }
 
         .back-link:hover {
             background: white;
-            color: #00f2fe;
+            color: #667eea;
             transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
 
-        .emoji {
-            font-size: 5rem;
-            margin-bottom: 2rem;
-            animation: bounce 2s infinite;
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #999;
         }
 
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes bounce {
-            0%, 100% {
-                transform: translateY(0);
-            }
-            50% {
-                transform: translateY(-20px);
-            }
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="emoji">🎨</div>
-        <h1>创意设计</h1>
-        <p>这是一个创意设计项目的示例页面。你可以在这里展示你的创意交互和视觉设计作品。</p>
-        <a href="../../index.html" class="back-link">← 返回主页</a>
+        <div class="header">
+            <h1>⚽ 赛事预测查询系统</h1>
+            <p>基于大语言模型的足球比赛预测分析</p>
+        </div>
+
+        <div class="api-config">
+            <label for="apiUrl">API 服务器地址：</label>
+            <input type="text" id="apiUrl" value="http://localhost:3001" placeholder="http://localhost:3001">
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-primary" onclick="loadTodayMatches()">📅 获取今日比赛</button>
+            <button class="btn btn-success" onclick="predictToday()">🔮 预测今日比赛</button>
+            <button class="btn btn-info" onclick="loadTodayPredictions()">📊 查看今日预测</button>
+            <button class="btn btn-warning" onclick="generateRecommendations()">⭐ 生成推荐</button>
+            <button class="btn btn-info" onclick="loadRecommendations()">💡 查看推荐</button>
+            <button class="btn btn-primary" onclick="compareResults()">📊 对比预测</button>
+            <button class="btn btn-primary" onclick="compareRecommendations()">⭐ 对比推荐</button>
+            <button class="btn btn-info" onclick="loadHistoryRecommendations()">📜 历史推荐</button>
+        </div>
+
+        <div class="content">
+            <div class="card">
+                <h2>📅 今日比赛</h2>
+                <div id="matchesContainer">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚽</div>
+                        <p>点击"获取今日比赛"查看比赛列表</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>🔮 预测结果</h2>
+                <div id="predictionsContainer">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📊</div>
+                        <p>点击"查看今日预测"查看预测结果</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 2rem;">
+            <h2>💡 推荐结果</h2>
+            <div id="recommendationsContainer">
+                <div class="empty-state">
+                    <div class="empty-state-icon">⭐</div>
+                    <p>点击"查看推荐"查看推荐结果</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 2rem;">
+            <h2>📜 历史推荐</h2>
+            <div style="margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center;">
+                <select id="historyTypeFilter" onchange="loadHistoryRecommendations()" style="flex: 1; padding: 0.75rem; border: 2px solid #ddd; border-radius: 5px; font-size: 1rem; cursor: pointer;">
+                    <option value="">全部推荐类型</option>
+                    <option value="goalRecommendation">进球数推荐</option>
+                    <option value="halfFullTimeRecommendation">半全场推荐</option>
+                    <option value="scoreRecommendation">比分推荐</option>
+                    <option value="comboRecommendation">二串一组合推荐</option>
+                </select>
+                <button class="btn btn-info" onclick="loadHistoryRecommendations()" style="padding: 0.75rem 1.5rem;">刷新数据</button>
+            </div>
+            <div id="historyStatisticsContainer"></div>
+            <div id="historyRecommendationsContainer">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📜</div>
+                    <p>点击"历史推荐"按钮加载历史数据</p>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: center;">
+            <a href="../../index.html" class="back-link">← 返回主页</a>
+        </div>
     </div>
+
+    <script>
+        const API_BASE = () => document.getElementById('apiUrl').value || 'http://localhost:3001';
+
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            try {
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                };
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+                const response = await fetch(`${API_BASE()}${endpoint}`, options);
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('API Error:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
+        function showLoading(containerId) {
+            document.getElementById(containerId).innerHTML = '<div class="loading">⏳ 加载中...</div>';
+        }
+
+        function showError(containerId, message) {
+            document.getElementById(containerId).innerHTML = `<div class="error">❌ 错误：${message}</div>`;
+        }
+
+        async function loadTodayMatches() {
+            showLoading('matchesContainer');
+            const result = await apiCall('/api/predictions/matches/today');
+            
+            if (!result.success) {
+                showError('matchesContainer', result.error || '获取比赛失败');
+                return;
+            }
+
+            const matches = result.data || [];
+            if (matches.length === 0) {
+                document.getElementById('matchesContainer').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><p>今日暂无比赛</p></div>';
+                return;
+            }
+
+            const html = matches.map(match => `
+                <div class="match-item">
+                    <div class="match-header">
+                        <div>
+                            <div class="match-teams">${match.homeTeam} vs ${match.awayTeam}</div>
+                            <div class="match-league">${match.league || '未知联赛'}</div>
+                        </div>
+                        <div class="match-time">${match.matchTime || ''}</div>
+                    </div>
+                    <div style="margin-top: 0.5rem; color: #666; font-size: 0.9rem;">
+                        比赛ID: ${match.matchId}
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('matchesContainer').innerHTML = html;
+        }
+
+        async function predictToday() {
+            if (!confirm('确定要预测今日所有比赛吗？这可能需要一些时间。')) {
+                return;
+            }
+
+            showLoading('predictionsContainer');
+            const result = await apiCall('/api/predictions/predict/today', 'POST');
+            
+            if (!result.success) {
+                showError('predictionsContainer', result.error || '预测失败');
+                return;
+            }
+
+            alert(`预测完成！成功预测 ${result.successCount || 0} 场比赛`);
+            loadTodayPredictions();
+        }
+
+        async function loadTodayPredictions() {
+            showLoading('predictionsContainer');
+            const result = await apiCall('/api/predictions/today');
+            
+            if (!result.success) {
+                showError('predictionsContainer', result.error || '获取预测失败');
+                return;
+            }
+
+            const predictions = result.data || [];
+            if (predictions.length === 0) {
+                document.getElementById('predictionsContainer').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><p>今日暂无预测结果</p></div>';
+                return;
+            }
+
+            const html = predictions.map(pred => {
+                const predData = pred.prediction?.prediction || {};
+                const confidence = parseInt(predData.confidence) || 0;
+                const confidenceClass = confidence >= 70 ? 'high' : confidence >= 50 ? 'medium' : 'low';
+                
+                return `
+                    <div class="match-item">
+                        <div class="match-header">
+                            <div class="match-teams">${pred.homeTeam} vs ${pred.awayTeam}</div>
+                            <span class="confidence confidence-${confidenceClass}">${confidence}%</span>
+                        </div>
+                        <div class="match-league">${pred.league || '未知'}</div>
+                        <div class="prediction-info">
+                            <div class="prediction-item">
+                                <span class="prediction-label">预测结果：</span>
+                                <span class="prediction-value">${predData.fullTimeResult || '未知'}</span>
+                            </div>
+                            <div class="prediction-item">
+                                <span class="prediction-label">预测比分：</span>
+                                <span class="prediction-value">${predData.score || '未知'}</span>
+                            </div>
+                            <div class="prediction-item">
+                                <span class="prediction-label">总进球数：</span>
+                                <span class="prediction-value">${predData.goalRange || '未知'}</span>
+                            </div>
+                            <div class="prediction-item">
+                                <span class="prediction-label">半全场：</span>
+                                <span class="prediction-value">${predData.halfFullTime || '未知'}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('predictionsContainer').innerHTML = html;
+        }
+
+        async function generateRecommendations() {
+            if (!confirm('确定要生成今日推荐吗？这可能需要一些时间。')) {
+                return;
+            }
+
+            showLoading('recommendationsContainer');
+            const result = await apiCall('/api/predictions/recommendations/generate', 'POST');
+            
+            if (!result.success) {
+                showError('recommendationsContainer', result.error || '生成推荐失败');
+                return;
+            }
+
+            alert('推荐生成成功！');
+            loadRecommendations();
+        }
+
+        async function loadRecommendations() {
+            showLoading('recommendationsContainer');
+            const result = await apiCall('/api/predictions/recommendations/today');
+            
+            if (!result.success) {
+                showError('recommendationsContainer', result.error || '获取推荐失败');
+                return;
+            }
+
+            const rec = result.data?.recommendation;
+            if (!rec) {
+                document.getElementById('recommendationsContainer').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⭐</div><p>今日暂无推荐结果</p></div>';
+                return;
+            }
+
+            let html = '';
+
+            // 进球数推荐
+            if (rec.goalRecommendation) {
+                const goal = rec.goalRecommendation;
+                html += `
+                    <div class="recommendation-section">
+                        <div class="recommendation-type">${goal.type || '进球数推荐'}</div>
+                        <p>${goal.description || ''}</p>
+                        ${goal.matches ? goal.matches.map(m => `
+                            <div class="match-item">
+                                <div class="match-teams">${m.homeTeam} vs ${m.awayTeam}</div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">进球数：</span>
+                                    <span class="prediction-value">${m.goalRange || ''}</span>
+                                </div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">信心度：</span>
+                                    <span class="prediction-value">${m.confidence || ''}%</span>
+                                </div>
+                            </div>
+                        `).join('') : ''}
+                    </div>
+                `;
+            }
+
+            // 半全场推荐
+            if (rec.halfFullTimeRecommendation) {
+                const hft = rec.halfFullTimeRecommendation;
+                html += `
+                    <div class="recommendation-section">
+                        <div class="recommendation-type">${hft.type || '半全场推荐'}</div>
+                        <p>${hft.description || ''}</p>
+                        ${hft.matches ? hft.matches.map(m => `
+                            <div class="match-item">
+                                <div class="match-teams">${m.homeTeam} vs ${m.awayTeam}</div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">半全场：</span>
+                                    <span class="prediction-value">${m.halfFullTime || ''}</span>
+                                </div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">信心度：</span>
+                                    <span class="prediction-value">${m.confidence || ''}%</span>
+                                </div>
+                            </div>
+                        `).join('') : ''}
+                    </div>
+                `;
+            }
+
+            // 比分推荐
+            if (rec.scoreRecommendation) {
+                const score = rec.scoreRecommendation;
+                html += `
+                    <div class="recommendation-section">
+                        <div class="recommendation-type">${score.type || '比分推荐'}</div>
+                        <p>${score.description || ''}</p>
+                        ${score.matches ? score.matches.map(m => `
+                            <div class="match-item">
+                                <div class="match-teams">${m.homeTeam} vs ${m.awayTeam}</div>
+                                ${m.scoreOptions ? `
+                                    <div class="score-options">
+                                        ${m.scoreOptions.map((opt, idx) => `
+                                            <div class="score-option ${idx === 0 ? 'high' : ''}">
+                                                <div style="font-weight: 600; font-size: 1.1rem;">${opt.score}</div>
+                                                <div style="font-size: 0.85rem; color: #666; margin-top: 0.25rem;">${opt.confidence}%</div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                ` : `
+                                    <div class="prediction-item">
+                                        <span class="prediction-label">比分：</span>
+                                        <span class="prediction-value">${m.score || ''}</span>
+                                    </div>
+                                `}
+                            </div>
+                        `).join('') : ''}
+                    </div>
+                `;
+            }
+
+            // 二串一组合推荐
+            if (rec.comboRecommendation) {
+                const combo = rec.comboRecommendation;
+                html += `
+                    <div class="recommendation-section">
+                        <div class="recommendation-type">${combo.type || '二串一组合推荐'} - ${combo.comboType || ''}</div>
+                        <p>${combo.description || ''}</p>
+                        <div style="background: #f0f0f0; padding: 1rem; border-radius: 5px; margin: 1rem 0;">
+                            <strong>组合：</strong> ${combo.combination || ''}
+                        </div>
+                        ${combo.matches ? combo.matches.map(m => `
+                            <div class="match-item">
+                                <div class="match-teams">${m.homeTeam} vs ${m.awayTeam}</div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">预测：</span>
+                                    <span class="prediction-value">${m.prediction || ''}</span>
+                                </div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">信心度：</span>
+                                    <span class="prediction-value">${m.confidence || ''}%</span>
+                                </div>
+                            </div>
+                        `).join('') : ''}
+                    </div>
+                `;
+            }
+
+            // 总结
+            if (rec.summary) {
+                html += `
+                    <div class="recommendation-section" style="margin-top: 2rem; padding-top: 2rem; border-top: 2px solid #ddd;">
+                        <h3 style="color: #667eea; margin-bottom: 1rem;">📋 推荐总结</h3>
+                        <p><strong>最佳推荐：</strong>${rec.summary.bestRecommendation || ''}</p>
+                        <p style="margin-top: 0.5rem;"><strong>推荐理由：</strong>${rec.summary.whyBest || ''}</p>
+                        <p style="margin-top: 0.5rem;"><strong>风险提示：</strong>${rec.summary.riskWarning || ''}</p>
+                    </div>
+                `;
+            }
+
+            document.getElementById('recommendationsContainer').innerHTML = html || '<div class="empty-state"><p>暂无推荐数据</p></div>';
+        }
+
+        async function compareResults() {
+            const date = prompt('请输入要对比的日期 (YYYY-MM-DD)', new Date().toISOString().split('T')[0]);
+            if (!date) return;
+
+            showLoading('predictionsContainer');
+            const result = await apiCall(`/api/predictions/compare?date=${date}`);
+            
+            if (!result.success) {
+                showError('predictionsContainer', result.error || '对比失败');
+                return;
+            }
+
+            const data = result.data;
+            const comparisons = data.comparisonResults || [];
+            const stats = data.statistics || {};
+
+            if (comparisons.length === 0) {
+                document.getElementById('predictionsContainer').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><p>暂无对比数据</p></div>';
+                return;
+            }
+
+            // 统计信息
+            let html = `
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 10px; margin-bottom: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem; font-size: 1.3rem;">📊 对比统计 (${date})</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">总比赛数</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.totalMatches || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">有结果比赛</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.matchesWithResults || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">胜负正确</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.fullTimeResultCorrect || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">比分正确</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.scoreCorrect || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">进球数正确</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.goalRangeCorrect || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">半全场正确</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.halfFullTimeCorrect || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">平均准确率</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.averageAccuracy || 0}%</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 对比详情
+            comparisons.forEach(comp => {
+                const hasResult = comp.hasOfficialResult;
+                const comparison = comp.comparison;
+                
+                html += `
+                    <div class="match-item">
+                        <div class="match-header">
+                            <div>
+                                <div class="match-teams">${comp.homeTeam} vs ${comp.awayTeam}</div>
+                                <div class="match-league">${comp.league || '未知'}</div>
+                            </div>
+                            ${hasResult && comparison ? `
+                                <span class="confidence confidence-${comparison.accuracy >= 75 ? 'high' : comparison.accuracy >= 50 ? 'medium' : 'low'}">
+                                    ${comparison.accuracy}%
+                                </span>
+                            ` : '<span style="color: #999;">暂无结果</span>'}
+                        </div>
+                        
+                        ${hasResult ? `
+                            <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div>
+                                        <div style="font-weight: 600; color: #667eea; margin-bottom: 0.5rem;">预测结果</div>
+                                        <div class="prediction-item">
+                                            <span class="prediction-label">胜负：</span>
+                                            <span class="prediction-value ${comparison?.fullTimeResult?.correct ? 'confidence-high' : ''}">${comp.prediction?.fullTimeResult || '未知'}</span>
+                                            ${comparison?.fullTimeResult?.correct ? ' ✅' : ' ❌'}
+                                        </div>
+                                        <div class="prediction-item">
+                                            <span class="prediction-label">比分：</span>
+                                            <span class="prediction-value ${comparison?.score?.correct ? 'confidence-high' : ''}">${comp.prediction?.score || '未知'}</span>
+                                            ${comparison?.score?.correct ? ' ✅' : ' ❌'}
+                                        </div>
+                                        <div class="prediction-item">
+                                            <span class="prediction-label">进球数：</span>
+                                            <span class="prediction-value ${comparison?.goalRange?.correct ? 'confidence-high' : ''}">${comp.prediction?.goalRange || '未知'}</span>
+                                            ${comparison?.goalRange?.correct ? ' ✅' : ' ❌'}
+                                        </div>
+                                        <div class="prediction-item">
+                                            <span class="prediction-label">半全场：</span>
+                                            <span class="prediction-value ${comparison?.halfFullTime?.correct ? 'confidence-high' : ''}">${comp.prediction?.halfFullTime || '未知'}</span>
+                                            ${comparison?.halfFullTime?.correct ? ' ✅' : ' ❌'}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight: 600; color: #28a745; margin-bottom: 0.5rem;">实际结果</div>
+                                        <div class="prediction-item">
+                                            <span class="prediction-label">胜负：</span>
+                                            <span class="prediction-value">${comp.actualResult?.fullTimeResult || '未知'}</span>
+                                        </div>
+                                        <div class="prediction-item">
+                                            <span class="prediction-label">比分：</span>
+                                            <span class="prediction-value">${comp.actualResult?.score || '未知'}</span>
+                                        </div>
+                                        <div class="prediction-item">
+                                            <span class="prediction-label">进球数：</span>
+                                            <span class="prediction-value">${comp.actualResult?.goalRange || '未知'}</span>
+                                        </div>
+                                        <div class="prediction-item">
+                                            <span class="prediction-label">半全场：</span>
+                                            <span class="prediction-value">${comp.actualResult?.halfFullTime || '未知'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : `
+                            <div style="margin-top: 1rem; padding: 1rem; background: #fff3cd; border-radius: 5px; color: #856404;">
+                                ⚠️ 该比赛暂无官方结果
+                            </div>
+                        `}
+    </div>
+                `;
+            });
+
+            document.getElementById('predictionsContainer').innerHTML = html;
+        }
+
+        async function compareRecommendations() {
+            const date = prompt('请输入要对比的日期 (YYYY-MM-DD)', new Date().toISOString().split('T')[0]);
+            if (!date) return;
+
+            showLoading('recommendationsContainer');
+            const result = await apiCall(`/api/predictions/compare-recommendations?date=${date}`);
+            
+            if (!result.success) {
+                showError('recommendationsContainer', result.error || '对比失败');
+                return;
+            }
+
+            const data = result.data;
+            const comparisons = data.comparisonResults || [];
+            const stats = data.statistics || {};
+            const rec = data.recommendation || {};
+
+            if (comparisons.length === 0) {
+                document.getElementById('recommendationsContainer').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⭐</div><p>暂无推荐对比数据</p></div>';
+                return;
+            }
+
+            // 统计信息
+            let html = `
+                <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 1.5rem; border-radius: 10px; margin-bottom: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem; font-size: 1.3rem;">⭐ 推荐对比统计 (${date})</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">推荐比赛数</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.totalRecommendedMatches || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">有结果比赛</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.matchesWithResults || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">进球数推荐正确</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.goalRecommendationCorrect || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">半全场推荐正确</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.halfFullTimeRecommendationCorrect || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">比分推荐正确</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.scoreRecommendationCorrect || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">组合推荐正确</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.comboRecommendationCorrect || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.9rem; opacity: 0.9;">整体准确率</div>
+                            <div style="font-size: 1.5rem; font-weight: 600;">${stats.overallAccuracy || 0}%</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 按推荐类型分组显示
+            const groupedByType = {};
+            comparisons.forEach(comp => {
+                if (!groupedByType[comp.type]) {
+                    groupedByType[comp.type] = [];
+                }
+                groupedByType[comp.type].push(comp);
+            });
+
+            // 显示每种推荐类型的对比结果
+            Object.keys(groupedByType).forEach(type => {
+                const typeName = {
+                    'goalRecommendation': '进球数推荐',
+                    'halfFullTimeRecommendation': '半全场推荐',
+                    'scoreRecommendation': '比分推荐',
+                    'comboRecommendation': '二串一组合推荐'
+                }[type] || type;
+
+                html += `
+                    <div class="recommendation-section">
+                        <div class="recommendation-type">${typeName}</div>
+                        ${groupedByType[type].map(comp => {
+                            const hasResult = comp.hasOfficialResult;
+                            const comparison = comp.comparison;
+                            const match = comp.match;
+                            
+                            return `
+                                <div class="match-item">
+                                    <div class="match-header">
+                                        <div>
+                                            <div class="match-teams">${match.homeTeam || '未知'} vs ${match.awayTeam || '未知'}</div>
+                                            <div class="match-league">${match.league || '未知'}</div>
+                                        </div>
+                                        ${hasResult && comparison ? `
+                                            <span class="confidence confidence-${comparison.correct ? 'high' : 'low'}">
+                                                ${comparison.correct ? '✅ 正确' : '❌ 错误'}
+                                            </span>
+                                        ` : '<span style="color: #999;">暂无结果</span>'}
+                                    </div>
+                                    
+                                    ${hasResult ? `
+                                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;">
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                                <div>
+                                                    <div style="font-weight: 600; color: #667eea; margin-bottom: 0.5rem;">推荐内容</div>
+                                                    ${type === 'goalRecommendation' ? `
+                                                        <div class="prediction-item">
+                                                            <span class="prediction-label">推荐进球数：</span>
+                                                            <span class="prediction-value">${match.goalRange || '未知'}</span>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${type === 'halfFullTimeRecommendation' ? `
+                                                        <div class="prediction-item">
+                                                            <span class="prediction-label">推荐半全场：</span>
+                                                            <span class="prediction-value">${match.halfFullTime || '未知'}</span>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${type === 'scoreRecommendation' ? `
+                                                        <div class="prediction-item">
+                                                            <span class="prediction-label">推荐比分：</span>
+                                                            <div class="score-options" style="margin-top: 0.5rem;">
+                                                                ${match.scoreOptions ? match.scoreOptions.map((opt, idx) => `
+                                                                    <div class="score-option ${opt.score === comp.actualResult?.score ? 'high' : ''}">
+                                                                        <div style="font-weight: 600;">${opt.score}</div>
+                                                                        <div style="font-size: 0.85rem; color: #666;">${opt.confidence}%</div>
+                                                                    </div>
+                                                                `).join('') : `<span>${match.score || '未知'}</span>`}
+                                                            </div>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${type === 'comboRecommendation' ? `
+                                                        <div class="prediction-item">
+                                                            <span class="prediction-label">推荐预测：</span>
+                                                            <span class="prediction-value">${match.prediction || '未知'}</span>
+                                                        </div>
+                                                    ` : ''}
+                                                    <div class="prediction-item">
+                                                        <span class="prediction-label">信心度：</span>
+                                                        <span class="prediction-value">${match.confidence || '未知'}%</span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div style="font-weight: 600; color: #28a745; margin-bottom: 0.5rem;">实际结果</div>
+                                                    <div class="prediction-item">
+                                                        <span class="prediction-label">比分：</span>
+                                                        <span class="prediction-value">${comp.actualResult?.score || '未知'}</span>
+                                                    </div>
+                                                    ${type === 'goalRecommendation' ? `
+                                                        <div class="prediction-item">
+                                                            <span class="prediction-label">总进球数：</span>
+                                                            <span class="prediction-value">${comp.actualResult?.totalGoals || '未知'}</span>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${type === 'halfFullTimeRecommendation' ? `
+                                                        <div class="prediction-item">
+                                                            <span class="prediction-label">半全场：</span>
+                                                            <span class="prediction-value">${comp.actualResult?.halfFullTime || '未知'}</span>
+                                                        </div>
+                                                    ` : ''}
+                                                    <div class="prediction-item">
+                                                        <span class="prediction-label">胜负：</span>
+                                                        <span class="prediction-value">${comp.actualResult?.fullTimeResult || '未知'}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ` : `
+                                        <div style="margin-top: 1rem; padding: 1rem; background: #fff3cd; border-radius: 5px; color: #856404;">
+                                            ⚠️ 该比赛暂无官方结果
+                                        </div>
+                                    `}
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            });
+
+            document.getElementById('recommendationsContainer').innerHTML = html;
+        }
+
+        async function loadHistoryRecommendations() {
+            const typeFilter = document.getElementById('historyTypeFilter').value;
+            const url = typeFilter 
+                ? `/api/predictions/recommendations/history?type=${typeFilter}`
+                : '/api/predictions/recommendations/history';
+            
+            showLoading('historyRecommendationsContainer');
+            
+            try {
+                const result = await apiCall(url);
+                
+                if (!result.success) {
+                    showError('historyRecommendationsContainer', result.error || '获取历史推荐失败');
+                    return;
+                }
+
+                const data = result.data || [];
+                const statistics = result.statistics || {};
+
+                // 显示统计信息
+                displayHistoryStatistics(statistics);
+
+                // 显示历史推荐列表
+                if (data.length === 0) {
+                    document.getElementById('historyRecommendationsContainer').innerHTML = 
+                        '<div class="empty-state"><div class="empty-state-icon">📜</div><p>暂无历史推荐数据</p></div>';
+                    return;
+                }
+
+                displayHistoryRecommendations(data);
+            } catch (error) {
+                console.error('加载历史推荐失败:', error);
+                showError('historyRecommendationsContainer', error.message || '加载历史推荐失败');
+            }
+        }
+
+        function displayHistoryStatistics(statistics) {
+            const container = document.getElementById('historyStatisticsContainer');
+            if (!statistics || Object.keys(statistics).length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">';
+            
+            Object.keys(statistics).forEach(type => {
+                const stat = statistics[type];
+                const streakColor = stat.currentStreak.type === 'win' ? '#dc3545' : stat.currentStreak.type === 'lose' ? '#000000' : '#6c757d';
+                const winRateColor = stat.winRate >= 60 ? '#28a745' : stat.winRate >= 40 ? '#ffc107' : '#dc3545';
+                
+                html += `
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem;">${stat.typeName}</div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span>总场次：</span>
+                            <strong>${stat.total}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span>正确：</span>
+                            <strong style="color: #28a745;">${stat.correct}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span>错误：</span>
+                            <strong style="color: #dc3545;">${stat.wrong}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span>胜率：</span>
+                            <strong style="color: ${winRateColor}; font-size: 1.2rem;">${stat.winRate}%</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.3);">
+                            <span>当前状态：</span>
+                            <strong style="color: ${streakColor}; font-size: 1.1rem;">${stat.currentStreak.display}</strong>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function displayHistoryRecommendations(data) {
+            const container = document.getElementById('historyRecommendationsContainer');
+            
+            let html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">';
+            html += `
+                <thead>
+                    <tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                        <th style="padding: 1rem; text-align: left; font-weight: 600;">日期</th>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600;">类型</th>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600;">比赛</th>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600;">推荐结果</th>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600;">实际结果</th>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600;">是否正确</th>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600;">连红/连黑</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+
+            data.forEach(item => {
+                const isCorrectClass = item.isCorrect === true ? 'success' : item.isCorrect === false ? 'error' : 'pending';
+                const isCorrectText = item.isCorrect === true ? '✅ 正确' : item.isCorrect === false ? '❌ 错误' : '⏳ 待定';
+                const isCorrectColor = item.isCorrect === true ? '#28a745' : item.isCorrect === false ? '#dc3545' : '#6c757d';
+                const streakColor = item.streak && item.streak.includes('红') ? '#dc3545' : item.streak && item.streak.includes('黑') ? '#000000' : '#6c757d';
+                
+                html += `
+                    <tr style="border-bottom: 1px solid #eee; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background='white'">
+                        <td style="padding: 1rem;">${item.date}</td>
+                        <td style="padding: 1rem;">
+                            <span style="padding: 0.25rem 0.75rem; background: #e9ecef; border-radius: 4px; font-size: 0.9rem;">${item.typeName}</span>
+                        </td>
+                        <td style="padding: 1rem;">
+                            <div style="font-weight: 600;">${item.type === 'comboRecommendation' ? item.homeTeam : `${item.homeTeam} vs ${item.awayTeam}`}</div>
+                            <div style="font-size: 0.85rem; color: #666; margin-top: 0.25rem;">${item.league || ''}</div>
+                        </td>
+                        <td style="padding: 1rem;">
+                            <span style="color: #667eea; font-weight: 600;">${item.recommended || '-'}</span>
+                        </td>
+                        <td style="padding: 1rem;">
+                            <span style="color: #666;">${item.actual || (item.hasResult ? '暂无结果' : '-')}</span>
+                        </td>
+                        <td style="padding: 1rem;">
+                            <span style="color: ${isCorrectColor}; font-weight: 600;">${isCorrectText}</span>
+                        </td>
+                        <td style="padding: 1rem;">
+                            <span style="color: ${streakColor}; font-weight: 600; font-size: 1.1rem;">${item.streak || '-'}</span>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
+        async function showHistoryRecommendations() {
+            // 先加载日期列表
+            showLoading('historyRecommendationsContainer');
+            const datesResult = await apiCall('/api/predictions/recommendations/dates?limit=100');
+            
+            if (!datesResult.success) {
+                showError('historyRecommendationsContainer', datesResult.error || '获取日期列表失败');
+                return;
+            }
+
+            const dates = datesResult.data || [];
+            const select = document.getElementById('historyDateSelect');
+            
+            // 清空并填充日期选项
+            select.innerHTML = '<option value="">请选择日期查看历史推荐...</option>';
+            dates.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.date;
+                const dateObj = new Date(item.createdAt);
+                option.textContent = `${item.date} (${dateObj.toLocaleDateString('zh-CN')} ${dateObj.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'})})`;
+                select.appendChild(option);
+            });
+
+            // 绑定日期选择事件
+            select.onchange = async function() {
+                const selectedDate = this.value;
+                if (!selectedDate) {
+                    document.getElementById('historyRecommendationsContainer').innerHTML = 
+                        '<div class="empty-state"><div class="empty-state-icon">📜</div><p>请选择日期</p></div>';
+                    return;
+                }
+
+                await loadHistoryRecommendation(selectedDate);
+            };
+
+            // 显示日期选择器
+            document.getElementById('historyRecommendationsContainer').innerHTML = 
+                `<div style="padding: 2rem; text-align: center; color: #667eea;">
+                    <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">✅ 已加载 ${dates.length} 天的推荐记录</p>
+                    <p style="color: #666; font-size: 0.9rem;">请从上方下拉菜单中选择日期查看历史推荐</p>
+                </div>`;
+        }
+
+        async function loadHistoryRecommendation(date) {
+            showLoading('historyRecommendationsContainer');
+            const result = await apiCall(`/api/predictions/recommendations/date/${date}`);
+            
+            if (!result.success) {
+                showError('historyRecommendationsContainer', result.error || '获取历史推荐失败');
+                return;
+            }
+
+            const rec = result.data?.recommendation;
+            if (!rec) {
+                document.getElementById('historyRecommendationsContainer').innerHTML = 
+                    '<div class="empty-state"><div class="empty-state-icon">📜</div><p>该日期暂无推荐</p></div>';
+                return;
+            }
+
+            // 使用和查看推荐相同的渲染逻辑
+            let html = `<div style="margin-bottom: 1.5rem; padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 5px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>📅 日期：</strong>${date}
+                    </div>
+                    <div style="font-size: 0.9rem; opacity: 0.9;">
+                        <strong>创建时间：</strong>${new Date(result.data.createdAt).toLocaleString('zh-CN')}
+                    </div>
+                </div>
+            </div>`;
+
+            // 进球数推荐
+            if (rec.goalRecommendation) {
+                const goal = rec.goalRecommendation;
+                html += `
+                    <div class="recommendation-section">
+                        <div class="recommendation-type">${goal.type || '进球数推荐'}</div>
+                        <p>${goal.description || ''}</p>
+                        ${goal.matches ? goal.matches.map(m => `
+                            <div class="match-item">
+                                <div class="match-teams">${m.homeTeam} vs ${m.awayTeam}</div>
+                                <div class="match-league">${m.league || '未知'}</div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">进球数：</span>
+                                    <span class="prediction-value">${m.goalRange || ''}</span>
+                                </div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">信心度：</span>
+                                    <span class="prediction-value">${m.confidence || ''}%</span>
+                                </div>
+                                ${m.reason ? `<div style="margin-top: 0.5rem; padding: 0.5rem; background: #f8f9fa; border-radius: 5px; font-size: 0.9rem; color: #666;">${m.reason}</div>` : ''}
+                            </div>
+                        `).join('') : ''}
+                    </div>
+                `;
+            }
+
+            // 半全场推荐
+            if (rec.halfFullTimeRecommendation) {
+                const hft = rec.halfFullTimeRecommendation;
+                html += `
+                    <div class="recommendation-section">
+                        <div class="recommendation-type">${hft.type || '半全场推荐'}</div>
+                        <p>${hft.description || ''}</p>
+                        ${hft.matches ? hft.matches.map(m => `
+                            <div class="match-item">
+                                <div class="match-teams">${m.homeTeam} vs ${m.awayTeam}</div>
+                                <div class="match-league">${m.league || '未知'}</div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">半全场：</span>
+                                    <span class="prediction-value">${m.halfFullTime || ''}</span>
+                                </div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">信心度：</span>
+                                    <span class="prediction-value">${m.confidence || ''}%</span>
+                                </div>
+                                ${m.reason ? `<div style="margin-top: 0.5rem; padding: 0.5rem; background: #f8f9fa; border-radius: 5px; font-size: 0.9rem; color: #666;">${m.reason}</div>` : ''}
+                            </div>
+                        `).join('') : ''}
+                    </div>
+                `;
+            }
+
+            // 比分推荐
+            if (rec.scoreRecommendation) {
+                const score = rec.scoreRecommendation;
+                html += `
+                    <div class="recommendation-section">
+                        <div class="recommendation-type">${score.type || '比分推荐'}</div>
+                        <p>${score.description || ''}</p>
+                        ${score.matches ? score.matches.map(m => `
+                            <div class="match-item">
+                                <div class="match-teams">${m.homeTeam} vs ${m.awayTeam}</div>
+                                <div class="match-league">${m.league || '未知'}</div>
+                                ${m.scoreOptions ? `
+                                    <div style="margin-top: 0.5rem;">
+                                        <div style="font-weight: 600; color: #667eea; margin-bottom: 0.5rem;">推荐比分（3个选项）：</div>
+                                        <div class="score-options">
+                                            ${m.scoreOptions.map((opt, idx) => `
+                                                <div class="score-option ${idx === 0 ? 'high' : ''}">
+                                                    <div style="font-weight: 600; font-size: 1.1rem;">${opt.score}</div>
+                                                    <div style="font-size: 0.85rem; color: #666; margin-top: 0.25rem;">${opt.confidence}%</div>
+                                                    ${opt.reason ? `<div style="font-size: 0.75rem; color: #999; margin-top: 0.25rem;">${opt.reason}</div>` : ''}
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                ` : `
+                                    <div class="prediction-item">
+                                        <span class="prediction-label">比分：</span>
+                                        <span class="prediction-value">${m.score || ''}</span>
+                                    </div>
+                                `}
+                            </div>
+                        `).join('') : ''}
+                    </div>
+                `;
+            }
+
+            // 二串一组合推荐
+            if (rec.comboRecommendation) {
+                const combo = rec.comboRecommendation;
+                html += `
+                    <div class="recommendation-section">
+                        <div class="recommendation-type">${combo.type || '二串一组合推荐'} - ${combo.comboType || ''}</div>
+                        <p>${combo.description || ''}</p>
+                        <div style="background: #f0f0f0; padding: 1rem; border-radius: 5px; margin: 1rem 0;">
+                            <strong>组合：</strong> ${combo.combination || ''}
+                        </div>
+                        ${combo.matches ? combo.matches.map(m => `
+                            <div class="match-item">
+                                <div class="match-teams">${m.homeTeam} vs ${m.awayTeam}</div>
+                                <div class="match-league">${m.league || '未知'}</div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">预测：</span>
+                                    <span class="prediction-value">${m.prediction || ''}</span>
+                                </div>
+                                <div class="prediction-item">
+                                    <span class="prediction-label">信心度：</span>
+                                    <span class="prediction-value">${m.confidence || ''}%</span>
+                                </div>
+                                ${m.reason ? `<div style="margin-top: 0.5rem; padding: 0.5rem; background: #f8f9fa; border-radius: 5px; font-size: 0.9rem; color: #666;">${m.reason}</div>` : ''}
+                            </div>
+                        `).join('') : ''}
+                    </div>
+                `;
+            }
+
+            // 总结
+            if (rec.summary) {
+                html += `
+                    <div class="recommendation-section" style="margin-top: 2rem; padding-top: 2rem; border-top: 2px solid #ddd;">
+                        <h3 style="color: #667eea; margin-bottom: 1rem;">📋 推荐总结</h3>
+                        <p><strong>最佳推荐：</strong>${rec.summary.bestRecommendation || ''}</p>
+                        <p style="margin-top: 0.5rem;"><strong>推荐理由：</strong>${rec.summary.whyBest || ''}</p>
+                        ${rec.summary.overallAnalysis ? `<p style="margin-top: 0.5rem;"><strong>整体分析：</strong>${rec.summary.overallAnalysis}</p>` : ''}
+                        <p style="margin-top: 0.5rem;"><strong>风险提示：</strong>${rec.summary.riskWarning || ''}</p>
+                    </div>
+                `;
+            }
+
+            document.getElementById('historyRecommendationsContainer').innerHTML = html || '<div class="empty-state"><p>暂无推荐数据</p></div>';
+        }
+
+        // 页面加载时自动获取今日比赛
+        window.addEventListener('load', () => {
+            loadTodayMatches();
+        });
+    </script>
 </body>
 </html>
