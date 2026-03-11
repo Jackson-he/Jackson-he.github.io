@@ -1,5 +1,5 @@
 // 英语积累系统 - 数据文件
-const modesData = {
+export const modesData = {
     mode1: {
         icon: '🔗',
         title: '逻辑与过渡模式',
@@ -312,4 +312,3 @@ const modesData = {
         ]
     }
 };
-
