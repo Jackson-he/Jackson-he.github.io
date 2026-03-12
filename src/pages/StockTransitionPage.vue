@@ -66,11 +66,26 @@ const statusLabel = computed(() => {
   if (dashboard.snapshot.sessionComplete) return '模拟已结束'
   return dashboard.snapshot.marketAllowed ? '市场允许开仓' : '市场禁止开仓'
 })
+const isRealtimeActive = computed(() => {
+  const stream = dashboard.realtimeStatus || {}
+  const subscriptions = stream.subscriptions || {}
+  return Boolean(
+    stream.connected
+    || stream.connecting
+    || stream.reconnectEnabled
+    || ['trades', 'quotes', 'bars'].some((key) => Array.isArray(subscriptions[key]) && subscriptions[key].length),
+  )
+})
 const realtimeStatusLabel = computed(() => {
   const stream = dashboard.realtimeStatus || {}
   if (stream.connected) return '实时流已连接'
   if (stream.connecting) return '实时流连接中'
+  if (isRealtimeActive.value) return '实时监听已开启'
   return '实时流未连接'
+})
+const realtimeStartLabel = computed(() => {
+  if (actionState.startingRealtime) return '启动中...'
+  return isRealtimeActive.value ? '实时监听已开启' : '启动实时监听'
 })
 const realStatusLabel = computed(() => {
   const status = dashboard.realStatus || {}
@@ -312,6 +327,10 @@ async function fetchRealQuote() {
 }
 
 async function startRealtime() {
+  if (isRealtimeActive.value) {
+    return
+  }
+
   actionState.startingRealtime = true
   try {
     await apiCall('/api/realtime/start', {
@@ -438,8 +457,8 @@ function pnlClass(value) {
           <button class="ghost-button" :disabled="actionState.resetting" @click="resetState">{{ actionState.resetting ? '重置中...' : (isRealMode ? '重置实时状态' : '重置模拟') }}</button>
         </div>
         <div class="button-row">
-          <button class="action-button" :disabled="actionState.startingRealtime" @click="startRealtime">{{ actionState.startingRealtime ? '启动中...' : '启动实时监听' }}</button>
-          <button class="ghost-button" :disabled="actionState.stoppingRealtime" @click="stopRealtime">{{ actionState.stoppingRealtime ? '停止中...' : '停止实时监听' }}</button>
+          <button class="action-button" :disabled="actionState.startingRealtime || isRealtimeActive" @click="startRealtime">{{ realtimeStartLabel }}</button>
+          <button class="ghost-button" :disabled="actionState.stoppingRealtime || !isRealtimeActive" @click="stopRealtime">{{ actionState.stoppingRealtime ? '停止中...' : '停止实时监听' }}</button>
         </div>
         <div class="feature-grid">
           <div v-for="feature in modeFeatures" :key="feature.label" class="feature-card">
