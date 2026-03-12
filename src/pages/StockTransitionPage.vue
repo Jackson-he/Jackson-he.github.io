@@ -407,7 +407,6 @@ function pnlClass(value) {
         <div class="panel-header">
           <div>
             <h2 class="panel-title">后端连接</h2>
-            <p class="panel-subtitle">GitHub Pages 只托管静态页面，这里需要填写你单独部署的 `stock-transition` 后端地址。</p>
           </div>
         </div>
         <div class="field-row">
