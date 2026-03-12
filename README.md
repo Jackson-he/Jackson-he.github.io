@@ -86,3 +86,10 @@ npm run build
 - `/#/projects/tools`：工具应用
 
 保留了旧的 HTML 路径，并通过跳转页兼容旧链接。
+
+
+## Stock Transition
+
+- 路由入口：`#/projects/stock-transition`
+- GitHub Pages 部署时页面为静态前端，需要单独部署 `stock-transition` 后端 API
+- 页面支持配置 `API Base URL`，并会把该地址保存在浏览器本地存储

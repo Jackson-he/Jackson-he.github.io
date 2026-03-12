@@ -26,6 +26,7 @@ export default defineConfig({
         englishPatternRedirect: resolve(rootDir, 'projects/data-viz/pattern-detail.html'),
         sportRedirect: resolve(rootDir, 'projects/creative/index.html'),
         toolsRedirect: resolve(rootDir, 'projects/tools/index.html'),
+        stockTransitionRedirect: resolve(rootDir, 'projects/stock-transition/index.html'),
       },
     },
   },

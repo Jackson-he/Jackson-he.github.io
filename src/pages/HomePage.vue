@@ -21,6 +21,12 @@ const projects = [
     to: '/projects/creative',
   },
   {
+    icon: '📈',
+    title: 'Stock Transition',
+    description: '部署到 GitHub Pages 的美股趋势突破监控面板，连接独立后端 API。',
+    to: '/projects/stock-transition',
+  },
+  {
     icon: '🛠️',
     title: '工具应用',
     description: '为后续更多工具页预留的模块化入口。',

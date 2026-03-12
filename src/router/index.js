@@ -6,6 +6,7 @@ import EnglishModeListPage from '@/pages/EnglishModeListPage.vue'
 import EnglishPatternDetailPage from '@/pages/EnglishPatternDetailPage.vue'
 import SportPredictionPage from '@/pages/SportPredictionPage.vue'
 import ToolsPage from '@/pages/ToolsPage.vue'
+import StockTransitionPage from '@/pages/StockTransitionPage.vue'
 
 const routes = [
   {
@@ -43,6 +44,12 @@ const routes = [
     name: 'sport-prediction',
     component: SportPredictionPage,
     meta: { title: '赛事预测查询 - Jackson He' },
+  },
+  {
+    path: '/projects/stock-transition',
+    name: 'stock-transition',
+    component: StockTransitionPage,
+    meta: { title: 'Stock Transition - Jackson He' },
   },
   {
     path: '/projects/tools',
