@@ -357,12 +357,10 @@ async function loadHistoryRecommendations() {
 <template>
   <main class="page page--dark">
     <div class="page-container page-grid">
-      <RouterLink class="back-link" to="/">← 返回主页</RouterLink>
 
       <section class="hero">
         <p class="eyebrow">Sport Prediction</p>
         <h1 class="hero-title">⚽ 赛事预测查询系统</h1>
-        <p class="hero-subtitle">将原本依赖大量 DOM 拼接的页面，改为 Vue 3 响应式数据面板。</p>
       </section>
 
       <section class="panel page-grid">

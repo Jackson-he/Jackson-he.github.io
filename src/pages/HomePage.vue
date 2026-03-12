@@ -23,7 +23,7 @@ const projects = [
   {
     icon: '🛠️',
     title: '工具应用',
-    description: '为后续更多工具页预留的 Vue 模块化入口。',
+    description: '为后续更多工具页预留的模块化入口。',
     to: '/projects/tools',
   },
 ]
@@ -33,9 +33,8 @@ const projects = [
   <main class="page page--dark">
     <div class="page-container">
       <section class="hero hero--center">
-        <p class="eyebrow">Vue 3 Refactor</p>
-        <h1 class="hero-title hero-title--gradient">Jackson He</h1>
-        <p class="hero-subtitle">个人项目展示 · 统一为 Vue 3 + Vue Router 单页架构</p>
+        <p class="eyebrow">Project Showcase</p>
+        <h1 class="hero-title hero-title--gradient">Jay He</h1>
       </section>
 
       <section class="project-grid">
@@ -53,7 +52,7 @@ const projects = [
       </section>
 
       <footer class="page-footer">
-        <p>© {{ year }} Jackson He · Vue 3 版本</p>
+        <p>© {{ year }} Jackson He</p>
         <p>
           <a href="https://github.com/Jackson-he" target="_blank" rel="noopener noreferrer">GitHub</a>
         </p>

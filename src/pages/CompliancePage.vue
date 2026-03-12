@@ -85,6 +85,14 @@ async function requestJson(url, payload) {
     throw new Error(data?.message || data?.error || '请求失败')
   }
 
+  if (data && typeof data === 'object' && 'success' in data) {
+    if (!data.success) {
+      throw new Error(data?.error || data?.message || '请求失败')
+    }
+
+    return data.data ?? data
+  }
+
   return data
 }
 
@@ -151,12 +159,11 @@ async function detectBatch() {
 <template>
   <main class="page page--indigo">
     <div class="page-container page-grid">
-      <RouterLink class="back-link" to="/">← 返回主页</RouterLink>
 
       <section class="hero">
         <p class="eyebrow">AI Compliance</p>
         <h1 class="hero-title">🔍 内容合规检测</h1>
-        <p class="hero-subtitle">保留原有检测能力，改为 Vue 3 状态驱动渲染。</p>
+        <p class="hero-subtitle">保留原有检测能力，并提供更清晰的结果展示。</p>
       </section>
 
       <section class="panel page-grid">
@@ -218,7 +225,7 @@ async function detectBatch() {
         <div class="panel-header">
           <div>
             <h2 class="panel-title">检测结果</h2>
-            <p class="panel-subtitle">Vue 模板自动转义文本，避免原先大量 `innerHTML` 拼接。</p>
+            <p class="panel-subtitle">自动转义文本内容，避免直接拼接 HTML。</p>
           </div>
         </div>
 
