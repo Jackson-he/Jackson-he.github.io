@@ -6,11 +6,14 @@ const API_BASE_STORAGE_KEY = 'stock-transition-api-base-url'
 const SYMBOLS_STORAGE_KEY = 'stock-transition-symbols'
 const DEFAULT_API_BASE = 'http://localhost:3101'
 const DEFAULT_SYMBOLS = 'AAPL,MSFT,NVDA,TSLA,TSM,INTC,PLTR,KTOS,CRCL'
+const REFRESH_INTERVALS = { realtime: 5000, market: 15000, idle: 60000, hidden: 120000 }
 
 const apiUrlInput = ref(readInitialApiBase())
 const apiUrl = ref(normalizeApiBase(apiUrlInput.value))
 const symbolsInput = ref(readStoredValue(SYMBOLS_STORAGE_KEY, DEFAULT_SYMBOLS))
 const refreshTimer = ref(null)
+let lastStaticRefreshAt = 0
+const STATIC_REFRESH_INTERVAL_MS = 60000
 
 const dashboard = reactive({
   loading: false,
@@ -39,6 +42,15 @@ const actionState = reactive({
   resetting: false,
   savingApi: false,
 })
+
+const confirmDialog = reactive({
+  open: false,
+  title: '',
+  message: '',
+  confirmText: '确认',
+})
+
+let confirmResolver = null
 
 const summaryMetrics = computed(() => {
   const summary = dashboard.snapshot.summary || {}
@@ -125,6 +137,68 @@ const healthSummary = computed(() => {
   return `${health.service || 'stock-transition'} · ${health.mode || dashboard.modeInfo?.mode || '-'} · ${health.time || '-'}`
 })
 
+function getUsMarketClockInfo() {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const parts = Object.fromEntries(formatter.formatToParts(new Date()).map((part) => [part.type, part.value]))
+  const hour = Number(parts.hour || 0)
+  const minute = Number(parts.minute || 0)
+
+  return {
+    weekday: parts.weekday || '',
+    totalMinutes: hour * 60 + minute,
+  }
+}
+
+function isRegularUsMarketOpen() {
+  const info = getUsMarketClockInfo()
+  const tradingDay = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(info.weekday)
+  return tradingDay && info.totalMinutes >= 570 && info.totalMinutes < 960
+}
+
+function getRefreshDelayMs() {
+  if (typeof document !== 'undefined' && document.hidden) {
+    return REFRESH_INTERVALS.hidden
+  }
+
+  if (isRealtimeActive.value) {
+    return REFRESH_INTERVALS.realtime
+  }
+
+  if (isRegularUsMarketOpen()) {
+    return REFRESH_INTERVALS.market
+  }
+
+  return REFRESH_INTERVALS.idle
+}
+
+function clearRefreshTimer() {
+  if (refreshTimer.value) {
+    window.clearTimeout(refreshTimer.value)
+    refreshTimer.value = null
+  }
+}
+
+function scheduleRefresh(delayOverride = null) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  clearRefreshTimer()
+  refreshTimer.value = window.setTimeout(() => {
+    refreshDashboard({ silent: true }).catch(() => {})
+  }, delayOverride == null ? getRefreshDelayMs() : delayOverride)
+}
+
+function handleVisibilityChange() {
+  scheduleRefresh(document.hidden ? REFRESH_INTERVALS.hidden : 0)
+}
+
 watch(symbolsInput, (value) => {
   if (typeof window !== 'undefined') {
     window.localStorage.setItem(SYMBOLS_STORAGE_KEY, value)
@@ -133,15 +207,12 @@ watch(symbolsInput, (value) => {
 
 onMounted(() => {
   refreshDashboard()
-  refreshTimer.value = window.setInterval(() => {
-    refreshDashboard({ silent: true })
-  }, 5000)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onBeforeUnmount(() => {
-  if (refreshTimer.value) {
-    window.clearInterval(refreshTimer.value)
-  }
+  clearRefreshTimer()
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 
 function createEmptySnapshot() {
@@ -217,6 +288,25 @@ async function apiCall(path, options = {}) {
   return Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
 }
 
+function shouldRefreshStaticData(force = false) {
+  return force || !lastStaticRefreshAt || (Date.now() - lastStaticRefreshAt >= STATIC_REFRESH_INTERVAL_MS)
+}
+
+async function refreshStaticDashboard() {
+  const [health, modeInfo, strategy, realStatus] = await Promise.all([
+    apiCall('/api/health'),
+    apiCall('/api/mode'),
+    apiCall('/api/strategy'),
+    apiCall('/api/real/status'),
+  ])
+
+  dashboard.health = health
+  dashboard.modeInfo = modeInfo
+  dashboard.strategy = strategy || {}
+  dashboard.realStatus = realStatus || {}
+  lastStaticRefreshAt = Date.now()
+}
+
 async function refreshDashboard({ silent = false } = {}) {
   if (!silent) {
     dashboard.loading = true
@@ -224,28 +314,25 @@ async function refreshDashboard({ silent = false } = {}) {
   dashboard.error = ''
 
   try {
-    const [health, modeInfo, snapshot, strategy, market, realStatus, realtimeStatus] = await Promise.all([
-      apiCall('/api/health'),
-      apiCall('/api/mode'),
+    const [snapshot, market, realtimeStatus] = await Promise.all([
       apiCall('/api/state'),
-      apiCall('/api/strategy'),
       apiCall('/api/market'),
-      apiCall('/api/real/status'),
       apiCall('/api/realtime/status'),
     ])
 
-    dashboard.health = health
-    dashboard.modeInfo = modeInfo
+    if (shouldRefreshStaticData(!silent)) {
+      await refreshStaticDashboard()
+    }
+
     dashboard.snapshot = snapshot || createEmptySnapshot()
-    dashboard.strategy = strategy || {}
     dashboard.market = market || {}
-    dashboard.realStatus = realStatus || {}
     dashboard.realtimeStatus = realtimeStatus || { latest: {} }
     dashboard.lastUpdatedAt = new Date().toISOString()
   } catch (error) {
     dashboard.error = error.message || '无法连接后端 API'
   } finally {
     dashboard.loading = false
+    scheduleRefresh()
   }
 }
 
@@ -264,6 +351,16 @@ async function saveApiBase() {
 }
 
 async function rebuildWatchlist() {
+  const confirmed = await openConfirmDialog({
+    title: isRealMode.value ? '确认重建真实观察名单？' : '确认重建观察名单？',
+    message: getRebuildWatchlistConfirmationMessage(),
+    confirmText: isRealMode.value ? '确认重建真实观察名单' : '确认重建观察名单',
+  })
+
+  if (!confirmed) {
+    return
+  }
+
   actionState.rebuilding = true
   try {
     const body = isRealMode.value ? { symbols: parseSymbols() } : {}
@@ -280,6 +377,18 @@ async function rebuildWatchlist() {
 }
 
 async function stepEngine(steps) {
+  if (steps >= 5) {
+    const confirmed = await openConfirmDialog({
+      title: `确认推进 ${steps} 分钟？`,
+      message: getStepAdvanceConfirmationMessage(steps),
+      confirmText: `确认推进 ${steps} 分钟`,
+    })
+
+    if (!confirmed) {
+      return
+    }
+  }
+
   actionState.stepping = true
   try {
     dashboard.snapshot = await apiCall('/api/engine/step', {
@@ -294,7 +403,86 @@ async function stepEngine(steps) {
   }
 }
 
+function getResetConfirmationMessage() {
+  if (isRealMode.value) {
+    return [
+      '这会清空当前真实模式下的观察名单、事件摘要、最近一次实时决策时间，并把账户摘要恢复为初始值。',
+      '已连接的实时监听不会被停止；如果你希望完全停止，请先点击“停止实时监听”。',
+      '',
+      '确认后将立即执行。'
+    ].join('\n')
+  }
+
+  return [
+    '这会把模拟会话恢复到初始状态：分钟游标归零、持仓/交易/事件清空、现金与权益恢复初始值。',
+    '重置后需要重新重建观察名单，并重新推进模拟。',
+    '',
+    '确认后将立即执行。'
+  ].join('\n')
+}
+
+function getStopRealtimeConfirmationMessage() {
+  return [
+    '这会立即停止当前的实时监听连接，并取消现有 trades / quotes / bars 订阅。',
+    '停止后页面仍会保留已展示的历史状态，但后端不再接收新的实时行情。',
+    '如果需要恢复，需要重新点击“启动实时监听”。'
+  ].join('\n')
+}
+
+function getRebuildWatchlistConfirmationMessage() {
+  if (isRealMode.value) {
+    return [
+      '这会重新扫描当前股票池，并用新的真实扫描结果覆盖当前观察名单。',
+      '已展示的诊断结果和观察名单会随之更新，但不会自动停止实时监听。',
+      '如果你当前正在参考旧观察名单，请确认后再继续。'
+    ].join('\n')
+  }
+
+  return [
+    '这会按当前 mock 数据重新计算观察名单和市场过滤结果。',
+    '现有持仓不会被清空，但后续推进时将基于新的观察名单继续判断。',
+    '如果你正在复盘当前会话，请确认这符合你的预期。'
+  ].join('\n')
+}
+
+function getStepAdvanceConfirmationMessage(steps) {
+  return [
+    `这会让模拟一次性推进 ${steps} 分钟。`,
+    '推进过程中可能触发新的买入、止盈、止损和事件记录。',
+    '该操作无法直接撤销；如果需要回到初始状态，只能重置模拟。'
+  ].join('\n')
+}
+
+function openConfirmDialog({ title, message, confirmText = '确认' }) {
+  confirmDialog.open = true
+  confirmDialog.title = title
+  confirmDialog.message = message
+  confirmDialog.confirmText = confirmText
+
+  return new Promise((resolve) => {
+    confirmResolver = resolve
+  })
+}
+
+function closeConfirmDialog(result) {
+  confirmDialog.open = false
+  if (confirmResolver) {
+    confirmResolver(result)
+    confirmResolver = null
+  }
+}
+
 async function resetState() {
+  const confirmed = await openConfirmDialog({
+    title: isRealMode.value ? '确认重置实时状态？' : '确认重置模拟？',
+    message: getResetConfirmationMessage(),
+    confirmText: isRealMode.value ? '确认重置实时状态' : '确认重置模拟',
+  })
+
+  if (!confirmed) {
+    return
+  }
+
   actionState.resetting = true
   try {
     dashboard.snapshot = await apiCall('/api/reset', {
@@ -369,6 +557,20 @@ async function startRealtime() {
 }
 
 async function stopRealtime() {
+  if (!isRealtimeActive.value) {
+    return
+  }
+
+  const confirmed = await openConfirmDialog({
+    title: '确认停止实时监听？',
+    message: getStopRealtimeConfirmationMessage(),
+    confirmText: '确认停止实时监听',
+  })
+
+  if (!confirmed) {
+    return
+  }
+
   actionState.stoppingRealtime = true
   try {
     await apiCall('/api/realtime/stop', {
@@ -643,6 +845,17 @@ function pnlClass(value) {
         </article>
       </section>
     </div>
+
+    <div v-if="confirmDialog.open" class="confirm-modal" @click.self="closeConfirmDialog(false)">
+      <div class="confirm-modal__card" role="dialog" aria-modal="true" :aria-label="confirmDialog.title">
+        <h2 class="panel-title">{{ confirmDialog.title }}</h2>
+        <p class="confirm-modal__body">{{ confirmDialog.message }}</p>
+        <div class="modal-actions">
+          <button class="ghost-button" @click="closeConfirmDialog(false)">取消</button>
+          <button class="action-button" @click="closeConfirmDialog(true)">{{ confirmDialog.confirmText }}</button>
+        </div>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -861,6 +1074,42 @@ th {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.confirm-modal__card {
+  width: min(520px, 100%);
+  padding: 24px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 28px 70px rgba(2, 6, 23, 0.42);
+  display: grid;
+  gap: 16px;
+}
+
+.confirm-modal__body {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.75;
+  color: var(--text-secondary);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 768px) {
