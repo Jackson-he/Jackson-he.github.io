@@ -25,11 +25,13 @@ const dashboard = reactive({
   realtimeStatus: { latest: {} },
   realScanResult: null,
   realQuoteResult: null,
+  watchlistDiagnosisResult: null,
 })
 
 const actionState = reactive({
   scanning: false,
   quoting: false,
+  diagnosing: false,
   startingRealtime: false,
   stoppingRealtime: false,
   rebuilding: false,
@@ -94,6 +96,12 @@ const realStatusLabel = computed(() => {
 })
 const latestRealtimeText = computed(() => {
   return formatJson(Object.keys(dashboard.realtimeStatus?.latest || {}).length ? dashboard.realtimeStatus.latest : '暂无数据')
+})
+const diagnosisItems = computed(() => dashboard.watchlistDiagnosisResult?.diagnoses || [])
+const diagnosisSummary = computed(() => {
+  const result = dashboard.watchlistDiagnosisResult
+  if (!result) return '尚未诊断'
+  return `请求 ${result.counts?.requested ?? 0} 个，入选 ${result.counts?.selected ?? 0} 个，未入选 ${result.counts?.rejected ?? 0} 个`
 })
 const modeFeatures = computed(() => {
   const features = dashboard.modeInfo?.features || {}
@@ -326,6 +334,17 @@ async function fetchRealQuote() {
   }
 }
 
+async function diagnoseWatchlist() {
+  actionState.diagnosing = true
+  try {
+    dashboard.watchlistDiagnosisResult = await apiCall(`/api/watchlist/diagnose?symbols=${encodeURIComponent(parseSymbols().join(','))}`)
+  } catch (error) {
+    dashboard.error = error.message || '诊断观察名单失败'
+  } finally {
+    actionState.diagnosing = false
+  }
+}
+
 async function startRealtime() {
   if (isRealtimeActive.value) {
     return
@@ -395,7 +414,6 @@ function pnlClass(value) {
       <section class="hero hero--center stock-hero">
         <p class="eyebrow">Stock Transition</p>
         <h1 class="hero-title">美股趋势突破面板</h1>
-        <p class="hero-subtitle">前端已迁移到 GitHub Pages 站点；后端 API 需要单独部署，并在下方填写可访问的地址。</p>
         <div class="badge-row">
           <span class="status-pill">{{ statusLabel }}</span>
           <span class="status-pill status-pill--secondary">{{ modeLabel }}</span>
@@ -433,6 +451,7 @@ function pnlClass(value) {
           <input v-model="symbolsInput" class="stock-input stock-input--wide" placeholder="AAPL,MSFT,NVDA" />
           <button class="action-button" :disabled="actionState.scanning" @click="fetchRealScan">{{ actionState.scanning ? '扫描中...' : '扫描真实观察名单' }}</button>
           <button class="ghost-button" :disabled="actionState.quoting" @click="fetchRealQuote">{{ actionState.quoting ? '查询中...' : '查询首个股票报价' }}</button>
+          <button class="ghost-button" :disabled="actionState.diagnosing" @click="diagnoseWatchlist">{{ actionState.diagnosing ? '诊断中...' : '诊断未入选原因' }}</button>
         </div>
         <div class="badge-row">
           <span class="status-pill">{{ realStatusLabel }}</span>
@@ -585,6 +604,32 @@ function pnlClass(value) {
           <div class="panel-header"><h2 class="panel-title">真实报价结果</h2></div>
           <pre class="json-view">{{ formatJson(dashboard.realQuoteResult || '尚未查询') }}</pre>
         </article>
+      </section>
+
+      <section class="panel page-grid">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Watchlist 诊断</h2>
+            <p class="panel-subtitle">解释某只股票为什么进入或未进入观察名单。</p>
+          </div>
+          <span class="status-pill status-pill--secondary">{{ diagnosisSummary }}</span>
+        </div>
+        <div v-if="!dashboard.watchlistDiagnosisResult" class="empty-state">
+          <div class="empty-state-icon">🧭</div>
+          <p>点击“诊断未入选原因”查看每个股票的筛选结果。</p>
+        </div>
+        <div v-else class="diagnosis-grid">
+          <article v-for="item in diagnosisItems" :key="item.symbol" :class="['diagnosis-card', item.selected ? 'diagnosis-card--selected' : 'diagnosis-card--rejected']">
+            <div class="diagnosis-card__head">
+              <strong class="mono">{{ item.symbol }}</strong>
+              <span :class="['feature-badge', item.selected ? 'feature-badge--on' : 'feature-badge--off']">{{ item.selected ? '已入选' : '未入选' }}</span>
+            </div>
+            <p class="panel-subtitle">{{ item.statusText }}</p>
+            <div v-if="item.reasonDetails?.length" class="badge-row">
+              <span v-for="reason in item.reasonDetails" :key="`${item.symbol}-${reason.code}`" class="status-pill status-pill--secondary">{{ reason.message }}</span>
+            </div>
+          </article>
+        </div>
       </section>
 
       <section class="page-grid page-grid--two">
@@ -785,6 +830,37 @@ th {
 
 .bad {
   color: #f87171;
+}
+
+.diagnosis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.diagnosis-card {
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  display: grid;
+  gap: 12px;
+}
+
+.diagnosis-card--selected {
+  border-color: rgba(34, 197, 94, 0.24);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.diagnosis-card--rejected {
+  border-color: rgba(248, 113, 113, 0.18);
+}
+
+.diagnosis-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 @media (max-width: 768px) {
