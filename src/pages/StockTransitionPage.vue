@@ -5,7 +5,7 @@ import { RouterLink } from 'vue-router'
 const API_BASE_STORAGE_KEY = 'stock-transition-api-base-url'
 const SYMBOLS_STORAGE_KEY = 'stock-transition-symbols'
 const DEFAULT_API_BASE = 'http://localhost:3101'
-const DEFAULT_SYMBOLS = 'AAPL,MSFT,NVDA,TSLA,TSM,INTC,PLTR,KTOS,CRCL'
+const DEFAULT_SYMBOLS = 'AAPL,MSFT,NVDA,TSLA,TSM,INTC,PLTR,KTOS,CRCL,AMD,META'
 const REFRESH_INTERVALS = { realtime: 5000, market: 15000, idle: 60000, hidden: 120000 }
 
 const apiUrlInput = ref(readInitialApiBase())
