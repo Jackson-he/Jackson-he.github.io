@@ -25,6 +25,7 @@ const dashboard = reactive({
   strategy: {},
   market: {},
   realStatus: {},
+  notificationStatus: {},
   realtimeStatus: { latest: {} },
   realScanResult: null,
   realQuoteResult: null,
@@ -35,6 +36,7 @@ const actionState = reactive({
   scanning: false,
   quoting: false,
   diagnosing: false,
+  testingNotify: false,
   startingRealtime: false,
   stoppingRealtime: false,
   rebuilding: false,
@@ -135,6 +137,14 @@ const healthSummary = computed(() => {
   const health = dashboard.health
   if (!health) return '尚未探测'
   return `${health.service || 'stock-transition'} · ${health.mode || dashboard.modeInfo?.mode || '-'} · ${health.time || '-'}`
+})
+const notificationStatusLabel = computed(() => {
+  const status = dashboard.notificationStatus || {}
+  const scheduler = status.scheduler || {}
+  if (!status.configured) return '飞书通知未配置'
+  if (scheduler.lastDelivery?.status === 'failed') return `飞书通知失败：${scheduler.lastDelivery.type || '-'}`
+  if (scheduler.running) return '飞书通知已启用'
+  return '飞书通知已配置'
 })
 
 function getUsMarketClockInfo() {
@@ -293,17 +303,19 @@ function shouldRefreshStaticData(force = false) {
 }
 
 async function refreshStaticDashboard() {
-  const [health, modeInfo, strategy, realStatus] = await Promise.all([
+  const [health, modeInfo, strategy, realStatus, notificationStatus] = await Promise.all([
     apiCall('/api/health'),
     apiCall('/api/mode'),
     apiCall('/api/strategy'),
     apiCall('/api/real/status'),
+    apiCall('/api/notifications/status'),
   ])
 
   dashboard.health = health
   dashboard.modeInfo = modeInfo
   dashboard.strategy = strategy || {}
   dashboard.realStatus = realStatus || {}
+  dashboard.notificationStatus = notificationStatus || {}
   lastStaticRefreshAt = Date.now()
 }
 
@@ -533,6 +545,21 @@ async function diagnoseWatchlist() {
   }
 }
 
+async function sendTestNotification() {
+  actionState.testingNotify = true
+  try {
+    await apiCall('/api/notifications/test', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    await refreshDashboard({ silent: true })
+  } catch (error) {
+    dashboard.error = error.message || '发送测试通知失败'
+  } finally {
+    actionState.testingNotify = false
+  }
+}
+
 async function startRealtime() {
   if (isRealtimeActive.value) {
     return
@@ -637,6 +664,7 @@ function pnlClass(value) {
         <div class="badge-row">
           <span class="status-pill status-pill--secondary mono">{{ apiUrl || '未配置 API Base URL' }}</span>
           <span class="status-pill status-pill--secondary">{{ healthSummary }}</span>
+          <span class="status-pill status-pill--secondary">{{ notificationStatusLabel }}</span>
           <span class="status-pill" :class="dashboard.error ? 'status-pill--danger' : 'status-pill--success'">{{ dashboard.error ? '连接异常' : '连接正常' }}</span>
         </div>
         <p v-if="apiBaseWarning" class="warning-text">{{ apiBaseWarning }}</p>
@@ -654,6 +682,7 @@ function pnlClass(value) {
           <button class="action-button" :disabled="actionState.scanning" @click="fetchRealScan">{{ actionState.scanning ? '扫描中...' : '扫描真实观察名单' }}</button>
           <button class="ghost-button" :disabled="actionState.quoting" @click="fetchRealQuote">{{ actionState.quoting ? '查询中...' : '查询首个股票报价' }}</button>
           <button class="ghost-button" :disabled="actionState.diagnosing" @click="diagnoseWatchlist">{{ actionState.diagnosing ? '诊断中...' : '诊断未入选原因' }}</button>
+          <button class="ghost-button" :disabled="actionState.testingNotify" @click="sendTestNotification">{{ actionState.testingNotify ? '发送中...' : '发送测试通知' }}</button>
         </div>
         <div class="badge-row">
           <span class="status-pill">{{ realStatusLabel }}</span>
@@ -835,6 +864,10 @@ function pnlClass(value) {
       </section>
 
       <section class="page-grid page-grid--two">
+        <article class="panel">
+          <div class="panel-header"><h2 class="panel-title">飞书通知状态</h2></div>
+          <pre class="json-view">{{ formatJson(dashboard.notificationStatus || '尚未加载') }}</pre>
+        </article>
         <article class="panel">
           <div class="panel-header"><h2 class="panel-title">实时状态详情</h2></div>
           <pre class="json-view">{{ formatJson(dashboard.realtimeStatus) }}</pre>
