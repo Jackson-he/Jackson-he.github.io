@@ -13,6 +13,18 @@ const toolProjects = [
     description: '部署到 GitHub Pages 的股票趋势突破面板，可连接独立后端 API。',
     to: '/projects/stock-transition',
   },
+  {
+    icon: '📉',
+    title: 'Futures Monitor',
+    description: '期货实时监控前端，支持 K 线、指标、信号和资金面板，后续可接入 Python 后端。',
+    to: '/projects/futures-monitor',
+  },
+  {
+    icon: '⌘',
+    title: 'Codex Chat',
+    description: '连接本地 Codex 服务的简洁聊天界面，支持多会话历史与项目级问答。',
+    to: '/projects/codex-chat',
+  },
 ]
 </script>
 

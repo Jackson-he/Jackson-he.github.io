@@ -7,6 +7,8 @@ import EnglishPatternDetailPage from '@/pages/EnglishPatternDetailPage.vue'
 import SportPredictionPage from '@/pages/SportPredictionPage.vue'
 import ToolsPage from '@/pages/ToolsPage.vue'
 import StockTransitionPage from '@/pages/StockTransitionPage.vue'
+import FuturesMonitorPage from '@/pages/FuturesMonitorPage.vue'
+import CodexChatPage from '@/pages/CodexChatPage.vue'
 
 const routes = [
   {
@@ -52,10 +54,22 @@ const routes = [
     meta: { title: 'Stock Transition - Jackson He' },
   },
   {
+    path: '/projects/futures-monitor',
+    name: 'futures-monitor',
+    component: FuturesMonitorPage,
+    meta: { title: '期货实时监控 - Jackson He' },
+  },
+  {
     path: '/projects/tools',
     name: 'tools',
     component: ToolsPage,
     meta: { title: '工具应用 - Jackson He' },
+  },
+  {
+    path: '/projects/codex-chat',
+    name: 'codex-chat',
+    component: CodexChatPage,
+    meta: { title: 'Codex Chat - Jackson He' },
   },
   {
     path: '/:pathMatch(.*)*',

@@ -27,10 +27,22 @@ const projects = [
     to: '/projects/stock-transition',
   },
   {
+    icon: '📉',
+    title: '期货实时监控',
+    description: '期货终端风格前端界面，支持实时/演示 K 线、指标叠加和资金信号面板。',
+    to: '/projects/futures-monitor',
+  },
+  {
     icon: '🛠️',
     title: '工具应用',
     description: '为后续更多工具页预留的模块化入口。',
     to: '/projects/tools',
+  },
+  {
+    icon: '⌘',
+    title: 'Codex Chat',
+    description: '基于 Codex SDK 的本地聊天工作台，支持历史会话和项目目录上下文。',
+    to: '/projects/codex-chat',
   },
 ]
 </script>
