@@ -63,7 +63,8 @@ const composerInput = ref(null)
 const drawerSection = ref('history')
 const isDrawerOpen = ref(false)
 const viewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWidth)
-let activeMessageController = null
+const hasScrolledMessages = ref(false)
+const isNearMessageBottom = ref(true)
 
 const normalizedApiBase = computed(() => apiBase.value.replace(/\/+$/, ''))
 const activeMessages = computed(() => activeConversation.value?.messages || [])
@@ -127,6 +128,7 @@ watch(
   async () => {
     await nextTick()
     scrollMessagesToBottom()
+    updateScrollIndicators()
   },
 )
 
@@ -148,6 +150,7 @@ onMounted(async () => {
   await refreshConversations()
   await nextTick()
   resizeComposerInput()
+  updateScrollIndicators()
 })
 
 onBeforeUnmount(() => {
@@ -157,11 +160,6 @@ onBeforeUnmount(() => {
 
   if (typeof document !== 'undefined') {
     document.body.style.overflow = ''
-  }
-
-  if (activeMessageController) {
-    activeMessageController.abort()
-    activeMessageController = null
   }
 })
 
@@ -296,14 +294,6 @@ async function sendMessage() {
     content,
     createdAt: new Date().toISOString(),
   }
-  const assistantPlaceholderId = `assistant-${Date.now()}`
-  const assistantPlaceholder = {
-    id: assistantPlaceholderId,
-    role: 'assistant',
-    content: '',
-    createdAt: new Date().toISOString(),
-    isStreaming: true,
-  }
 
   draft.value = ''
 
@@ -322,10 +312,10 @@ async function sendMessage() {
 
     activeConversation.value = {
       ...activeConversation.value,
-      messages: [...(activeConversation.value.messages || []), optimisticUserMessage, assistantPlaceholder],
+      messages: [...(activeConversation.value.messages || []), optimisticUserMessage],
     }
 
-    const response = await fetch(`${normalizedApiBase.value}/api/codex/conversations/${activeConversationId.value}/messages/stream`, {
+    const response = await fetch(`${normalizedApiBase.value}/api/codex/conversations/${activeConversationId.value}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -334,39 +324,26 @@ async function sendMessage() {
         content,
         ...buildConversationPayload(),
       }),
-      signal: createStreamController(),
     })
+    const data = await response.json().catch(() => ({}))
 
     if (!response.ok) {
-      const data = await response.json().catch(() => ({}))
+      if (data.conversation) {
+        activeConversation.value = data.conversation
+        await refreshConversations()
+      }
       throw new Error(data.error || `Request failed with status ${response.status}`)
     }
 
-    if (!response.body) {
-      throw new Error('Streaming response body is unavailable')
-    }
-
-    const result = await consumeMessageStream(response.body, assistantPlaceholderId)
-    activeMessageController = null
-
-    if (result?.conversation) {
-      activeConversation.value = result.conversation
-      statusMessage.value = `本轮完成，用时 ${formatDuration(result.durationMs)}`
-    }
-
+    activeConversation.value = data.conversation
+    statusMessage.value = `本轮完成，用时 ${formatDuration(data.durationMs)}`
     await refreshConversations()
   } catch (error) {
-    activeMessageController = null
     errorMessage.value = error.message
-    if (
-      activeConversation.value?.messages?.some((message) => message.id === optimisticUserMessage.id) &&
-      !activeConversation.value?.messages?.some((message) => message.isError)
-    ) {
+    if (activeConversation.value?.messages?.some((message) => message.id === optimisticUserMessage.id)) {
       activeConversation.value = {
         ...activeConversation.value,
-        messages: activeConversation.value.messages.filter(
-          (message) => message.id !== optimisticUserMessage.id && message.id !== assistantPlaceholderId,
-        ),
+        messages: activeConversation.value.messages.filter((message) => message.id !== optimisticUserMessage.id),
       }
     }
   } finally {
@@ -449,28 +426,6 @@ function resizeComposerInput() {
   composerInput.value.style.height = `${Math.min(Math.max(composerInput.value.scrollHeight, 34), 180)}px`
 }
 
-function replaceAssistantDraft(messageId, content) {
-  if (!activeConversation.value) {
-    return
-  }
-
-  activeConversation.value = {
-    ...activeConversation.value,
-    messages: activeConversation.value.messages.map((message) =>
-      message.id === messageId
-        ? {
-            ...message,
-            content,
-      }
-        : message,
-    ),
-  }
-
-  nextTick(() => {
-    scrollMessagesToBottom()
-  })
-}
-
 function parseMessageSegments(content) {
   const text = typeof content === 'string' ? content : ''
   const segments = []
@@ -515,113 +470,25 @@ async function copyText(content) {
   }
 }
 
-function createStreamController() {
-  if (activeMessageController) {
-    activeMessageController.abort()
-  }
-
-  activeMessageController = new AbortController()
-  return activeMessageController.signal
-}
-
-async function consumeMessageStream(stream, assistantMessageId) {
-  const reader = stream.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let finalPayload = null
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) {
-        break
-      }
-
-      buffer += decoder.decode(value, { stream: true })
-      const chunks = buffer.split('\n\n')
-      buffer = chunks.pop() || ''
-
-      for (const chunk of chunks) {
-        const result = handleSseChunk(chunk, assistantMessageId)
-        if (result?.type === 'conversation') {
-          finalPayload = result.payload
-        }
-
-        if (result?.type === 'error') {
-          throw new Error(result.payload.error || 'Streaming request failed')
-        }
-      }
-    }
-
-    if (buffer.trim()) {
-      const result = handleSseChunk(buffer, assistantMessageId)
-      if (result?.type === 'conversation') {
-        finalPayload = result.payload
-      }
-
-      if (result?.type === 'error') {
-        throw new Error(result.payload.error || 'Streaming request failed')
-      }
-    }
-
-    return finalPayload
-  } finally {
-    reader.releaseLock()
-  }
-}
-
-function handleSseChunk(chunk, assistantMessageId) {
-  if (!chunk.trim()) {
-    return null
-  }
-
-  let eventName = 'message'
-  const dataLines = []
-
-  for (const line of chunk.split(/\r?\n/)) {
-    if (line.startsWith('event:')) {
-      eventName = line.slice(6).trim()
-      continue
-    }
-
-    if (line.startsWith('data:')) {
-      dataLines.push(line.slice(5).trim())
-    }
-  }
-
-  const payload = dataLines.length ? JSON.parse(dataLines.join('\n')) : {}
-
-  if (eventName === 'assistant_snapshot') {
-    replaceAssistantDraft(assistantMessageId, payload.content || '')
-    return null
-  }
-
-  if (eventName === 'conversation') {
-    activeConversation.value = payload.conversation
-    return {
-      type: 'conversation',
-      payload,
-    }
-  }
-
-  if (eventName === 'error') {
-    if (payload.conversation) {
-      activeConversation.value = payload.conversation
-    }
-
-    return {
-      type: 'error',
-      payload,
-    }
-  }
-
-  return null
-}
-
 function scrollMessagesToBottom() {
   if (messageViewport.value) {
     messageViewport.value.scrollTop = messageViewport.value.scrollHeight
+    updateScrollIndicators()
   }
+}
+
+function updateScrollIndicators() {
+  if (!messageViewport.value) {
+    hasScrolledMessages.value = false
+    isNearMessageBottom.value = true
+    return
+  }
+
+  const viewport = messageViewport.value
+  const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+
+  hasScrolledMessages.value = viewport.scrollTop > 8
+  isNearMessageBottom.value = distanceFromBottom < 24
 }
 
 function formatTime(value) {
@@ -840,15 +707,10 @@ function saveStorage(key, value) {
             <span>允许网络访问</span>
           </label>
         </div>
-
-        <div class="codex-drawer-footer">
-          <RouterLink to="/projects/tools" class="codex-link-chip">返回工具应用</RouterLink>
-          <span class="codex-settings-meta">工作区仅允许访问当前仓库内部路径</span>
-        </div>
       </aside>
 
       <section class="codex-stage">
-        <header class="codex-topbar">
+        <header class="codex-topbar" :class="{ 'is-elevated': hasScrolledMessages }">
           <div class="codex-topbar-group">
             <button type="button" class="codex-round-button" @click="toggleDrawer('history')">☰</button>
             <button type="button" class="codex-pill-button codex-pill-button--brand" @click="openDrawer('history')">
@@ -871,7 +733,7 @@ function saveStorage(key, value) {
           </div>
         </header>
 
-        <div class="codex-conversation-bar">
+        <div class="codex-conversation-bar" :class="{ 'is-elevated': hasScrolledMessages }">
           <div class="codex-conversation-meta">
             <p class="codex-conversation-path">{{ activeWorkingDirectory }}</p>
             <h1>{{ activeTitle }}</h1>
@@ -892,7 +754,7 @@ function saveStorage(key, value) {
           </button>
         </div>
 
-        <section ref="messageViewport" class="codex-stage-scroll">
+        <section ref="messageViewport" class="codex-stage-scroll" @scroll="updateScrollIndicators">
           <div v-if="!hasMessages" class="codex-welcome">
             <p class="codex-welcome-kicker">Connected to your local Codex service</p>
             <h2>有什么可以帮忙的？</h2>
@@ -962,7 +824,7 @@ function saveStorage(key, value) {
           <p v-if="errorMessage" class="codex-feedback-text codex-feedback-text--error">{{ errorMessage }}</p>
         </div>
 
-        <form class="codex-composer" @submit.prevent="sendMessage">
+        <form class="codex-composer" :class="{ 'is-elevated': !isNearMessageBottom }" @submit.prevent="sendMessage">
           <button type="button" class="codex-composer-side" @click="createConversation">＋</button>
           <textarea
             ref="composerInput"
