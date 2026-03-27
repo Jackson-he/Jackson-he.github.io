@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
+import MarkdownIt from 'markdown-it'
 
 const STORAGE_KEYS = {
   apiBase: 'codex-chat-api-base',
@@ -37,6 +38,7 @@ const SUGGESTION_PROMPTS = [
 ]
 
 const MOBILE_BREAKPOINT = 980
+const markdown = createMarkdownRenderer()
 
 const apiBase = ref(loadStorage(STORAGE_KEYS.apiBase, 'http://127.0.0.1:3200'))
 const workingDirectory = ref(loadStorage(STORAGE_KEYS.workingDirectory, '.'))
@@ -52,7 +54,6 @@ const activeConversation = ref(null)
 const serviceStatus = ref(null)
 const loadingList = ref(false)
 const loadingConversation = ref(false)
-const sending = ref(false)
 const creatingConversation = ref(false)
 const deletingConversation = ref(false)
 const errorMessage = ref('')
@@ -65,10 +66,12 @@ const isDrawerOpen = ref(false)
 const viewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWidth)
 const hasScrolledMessages = ref(false)
 const isNearMessageBottom = ref(true)
+const editingMessageId = ref('')
+const editingMessageContent = ref('')
+const pendingConversationIds = ref([])
 
 const normalizedApiBase = computed(() => apiBase.value.replace(/\/+$/, ''))
 const activeMessages = computed(() => activeConversation.value?.messages || [])
-const activeTitle = computed(() => activeConversation.value?.title || '新对话')
 const activeWorkingDirectory = computed(() => activeConversation.value?.workingDirectory || workingDirectory.value || '.')
 const isDesktop = computed(() => viewportWidth.value >= MOBILE_BREAKPOINT)
 const shouldShowDrawer = computed(() => isDesktop.value || isDrawerOpen.value)
@@ -76,6 +79,9 @@ const shouldShowDrawerOverlay = computed(() => !isDesktop.value && isDrawerOpen.
 const hasMessages = computed(() => activeMessages.value.length > 0)
 const serviceStateText = computed(() => (serviceStatus.value?.ok ? '服务在线' : '等待连接'))
 const serviceStateClass = computed(() => (serviceStatus.value?.ok ? 'is-online' : 'is-offline'))
+const activeConversationPending = computed(() =>
+  activeConversationId.value ? pendingConversationIds.value.includes(activeConversationId.value) : false,
+)
 const selectedModelLabel = computed(() => model.value || serviceStatus.value?.defaults?.model || '服务默认')
 const availableModelOptions = computed(() => {
   const options = []
@@ -214,9 +220,15 @@ async function loadConversation(id, options = {}) {
     const data = await apiCall(`/api/codex/conversations/${id}`)
     activeConversation.value = data.conversation
     errorMessage.value = ''
+    if (options.announce !== false) {
+      statusMessage.value = `已切换到「${data.conversation.title}」`
+    }
 
     if (!options.preserveDrawer) {
       closeDrawerOnMobile()
+      nextTick(() => {
+        composerInput.value?.focus()
+      })
     }
   } catch (error) {
     errorMessage.value = error.message
@@ -280,80 +292,51 @@ async function deleteConversation(id) {
 async function sendMessage() {
   const content = draft.value.trim()
 
-  if (!content || sending.value) {
+  if (!content) {
     return
   }
 
-  sending.value = true
-  errorMessage.value = ''
-  statusMessage.value = ''
-
-  const optimisticUserMessage = {
-    id: `temp-${Date.now()}`,
-    role: 'user',
-    content,
-    createdAt: new Date().toISOString(),
-  }
-
-  draft.value = ''
-
-  try {
-    if (!activeConversationId.value) {
-      await createConversation({ propagateError: true })
-    }
-
-    if (!activeConversation.value) {
-      activeConversation.value = {
-        id: activeConversationId.value,
-        title: buildConversationTitle(content),
-        messages: [],
-      }
-    }
-
-    activeConversation.value = {
-      ...activeConversation.value,
-      messages: [...(activeConversation.value.messages || []), optimisticUserMessage],
-    }
-
-    const response = await fetch(`${normalizedApiBase.value}/api/codex/conversations/${activeConversationId.value}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        content,
-        ...buildConversationPayload(),
-      }),
-    })
-    const data = await response.json().catch(() => ({}))
-
-    if (!response.ok) {
-      if (data.conversation) {
-        activeConversation.value = data.conversation
-        await refreshConversations()
-      }
-      throw new Error(data.error || `Request failed with status ${response.status}`)
-    }
-
-    activeConversation.value = data.conversation
-    statusMessage.value = `本轮完成，用时 ${formatDuration(data.durationMs)}`
-    await refreshConversations()
-  } catch (error) {
-    errorMessage.value = error.message
-    if (activeConversation.value?.messages?.some((message) => message.id === optimisticUserMessage.id)) {
-      activeConversation.value = {
-        ...activeConversation.value,
-        messages: activeConversation.value.messages.filter((message) => message.id !== optimisticUserMessage.id),
-      }
-    }
-  } finally {
-    sending.value = false
+  const sent = await submitMessageContent(content)
+  if (sent) {
+    draft.value = ''
+    await nextTick()
+    resizeComposerInput()
   }
 }
 
 function sendSuggestion(prompt) {
   draft.value = prompt
   sendMessage()
+}
+
+function startEditingMessage(message) {
+  editingMessageId.value = message.id
+  editingMessageContent.value = message.content
+}
+
+function cancelEditingMessage() {
+  editingMessageId.value = ''
+  editingMessageContent.value = ''
+}
+
+async function submitEditedMessage() {
+  const content = editingMessageContent.value.trim()
+
+  if (!content || activeConversationPending.value) {
+    return
+  }
+
+  const sent = await submitMessageContent(content)
+  if (sent) {
+    cancelEditingMessage()
+  }
+}
+
+function handleEditComposerKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    submitEditedMessage()
+  }
 }
 
 function buildConversationPayload() {
@@ -370,6 +353,7 @@ function buildConversationPayload() {
 function resetComposerState() {
   activeConversationId.value = ''
   activeConversation.value = null
+  cancelEditingMessage()
 }
 
 function handleComposerKeydown(event) {
@@ -417,6 +401,106 @@ function closeDrawerOnMobile() {
   }
 }
 
+async function submitMessageContent(content) {
+  if (!content) {
+    return false
+  }
+  let conversationId = activeConversationId.value
+
+  const optimisticUserMessage = {
+    id: `temp-${Date.now()}`,
+    role: 'user',
+    content,
+    createdAt: new Date().toISOString(),
+  }
+
+  try {
+    if (!conversationId) {
+      const createdConversation = await createConversation({ propagateError: true })
+      conversationId = createdConversation?.id || ''
+    }
+
+    if (!conversationId || isConversationPending(conversationId)) {
+      return false
+    }
+
+    if (isActiveConversation(conversationId)) {
+      errorMessage.value = ''
+      statusMessage.value = ''
+    }
+
+    setConversationPending(conversationId, true)
+
+    if (!activeConversation.value || activeConversation.value.id !== conversationId) {
+      if (isActiveConversation(conversationId)) {
+        activeConversation.value = {
+          id: conversationId,
+          title: buildConversationTitle(content),
+          messages: [],
+        }
+      }
+    } else if (!activeConversation.value) {
+      activeConversation.value = {
+        id: conversationId,
+        title: buildConversationTitle(content),
+        messages: [],
+      }
+    }
+
+    if (isActiveConversation(conversationId) && activeConversation.value?.id === conversationId) {
+      activeConversation.value = {
+        ...activeConversation.value,
+        messages: [...(activeConversation.value.messages || []), optimisticUserMessage],
+      }
+    }
+
+    const response = await fetch(`${normalizedApiBase.value}/api/codex/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content,
+        ...buildConversationPayload(),
+      }),
+    })
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      if (data.conversation && isActiveConversation(conversationId)) {
+        activeConversation.value = data.conversation
+      }
+      await refreshConversations()
+      throw new Error(data.error || `Request failed with status ${response.status}`)
+    }
+
+    if (isActiveConversation(conversationId)) {
+      activeConversation.value = data.conversation
+      statusMessage.value = `本轮完成，用时 ${formatDuration(data.durationMs)}`
+      errorMessage.value = ''
+    }
+    await refreshConversations()
+    return true
+  } catch (error) {
+    if (isActiveConversation(conversationId)) {
+      errorMessage.value = error.message
+    }
+
+    if (
+      isActiveConversation(conversationId) &&
+      activeConversation.value?.messages?.some((message) => message.id === optimisticUserMessage.id)
+    ) {
+      activeConversation.value = {
+        ...activeConversation.value,
+        messages: activeConversation.value.messages.filter((message) => message.id !== optimisticUserMessage.id),
+      }
+    }
+    return false
+  } finally {
+    setConversationPending(conversationId, false)
+  }
+}
+
 function resizeComposerInput() {
   if (!composerInput.value) {
     return
@@ -424,41 +508,6 @@ function resizeComposerInput() {
 
   composerInput.value.style.height = '0px'
   composerInput.value.style.height = `${Math.min(Math.max(composerInput.value.scrollHeight, 34), 180)}px`
-}
-
-function parseMessageSegments(content) {
-  const text = typeof content === 'string' ? content : ''
-  const segments = []
-  const regex = /```([^\n`]*)\n?([\s\S]*?)```/g
-  let lastIndex = 0
-  let match = regex.exec(text)
-
-  while (match) {
-    if (match.index > lastIndex) {
-      segments.push({
-        type: 'text',
-        content: text.slice(lastIndex, match.index),
-      })
-    }
-
-    segments.push({
-      type: 'code',
-      language: match[1].trim(),
-      content: match[2].replace(/\n$/, ''),
-    })
-
-    lastIndex = regex.lastIndex
-    match = regex.exec(text)
-  }
-
-  if (lastIndex < text.length) {
-    segments.push({
-      type: 'text',
-      content: text.slice(lastIndex),
-    })
-  }
-
-  return segments.length ? segments : [{ type: 'text', content: text }]
 }
 
 async function copyText(content) {
@@ -470,11 +519,49 @@ async function copyText(content) {
   }
 }
 
+function renderMarkdown(content) {
+  return markdown.render(typeof content === 'string' ? content : '')
+}
+
+function handleMessageContentClick(event) {
+  const copyButton = event.target.closest('[data-copy-code]')
+  if (!copyButton) {
+    return
+  }
+
+  const codeElement = copyButton.closest('.codex-code-block')?.querySelector('code')
+  if (!codeElement) {
+    return
+  }
+
+  copyText(codeElement.textContent || '')
+}
+
 function scrollMessagesToBottom() {
   if (messageViewport.value) {
     messageViewport.value.scrollTop = messageViewport.value.scrollHeight
     updateScrollIndicators()
   }
+}
+
+function isConversationPending(conversationId) {
+  return Boolean(conversationId) && pendingConversationIds.value.includes(conversationId)
+}
+
+function setConversationPending(conversationId, isPending) {
+  if (!conversationId) {
+    return
+  }
+
+  const next = pendingConversationIds.value.filter((id) => id !== conversationId)
+  if (isPending) {
+    next.push(conversationId)
+  }
+  pendingConversationIds.value = next
+}
+
+function isActiveConversation(conversationId) {
+  return Boolean(conversationId) && activeConversationId.value === conversationId
 }
 
 function updateScrollIndicators() {
@@ -558,6 +645,43 @@ function saveStorage(key, value) {
     // Ignore storage failures in private mode.
   }
 }
+
+function createMarkdownRenderer() {
+  const instance = new MarkdownIt({
+    html: false,
+    linkify: true,
+    breaks: true,
+  })
+
+  const defaultLinkOpen =
+    instance.renderer.rules.link_open ||
+    ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options))
+
+  instance.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+    const token = tokens[idx]
+    token.attrSet('target', '_blank')
+    token.attrSet('rel', 'noopener noreferrer')
+    return defaultLinkOpen(tokens, idx, options, env, self)
+  }
+
+  instance.renderer.rules.fence = (tokens, idx) => {
+    const token = tokens[idx]
+    const language = token.info.trim().split(/\s+/)[0] || 'code'
+    const escapedLanguage = instance.utils.escapeHtml(language)
+    const escapedCode = instance.utils.escapeHtml(token.content.replace(/\n$/, ''))
+
+    return `
+<div class="codex-code-block">
+  <div class="codex-code-block-head">
+    <span>${escapedLanguage}</span>
+    <button type="button" class="codex-code-copy" data-copy-code="true">复制</button>
+  </div>
+  <pre><code class="language-${escapedLanguage}">${escapedCode}</code></pre>
+</div>`
+  }
+
+  return instance
+}
 </script>
 
 <template>
@@ -594,24 +718,13 @@ function saveStorage(key, value) {
         </div>
 
         <div v-if="drawerSection === 'history'" class="codex-drawer-panel">
-          <div class="codex-sidebar-card">
-            <div class="codex-sidebar-row">
-              <div>
-                <strong>会话列表</strong>
-                <p>{{ conversations.length }} 条历史记录</p>
-              </div>
-              <button type="button" class="codex-soft-button" :disabled="loadingList" @click="refreshConversations">
-                刷新
-              </button>
+          <div class="codex-history-toolbar">
+            <div class="codex-history-summary">
+              <strong>会话列表</strong>
+              <span>{{ conversations.length }} 条</span>
             </div>
-
-            <button
-              type="button"
-              class="codex-primary-button codex-primary-button--full"
-              :disabled="creatingConversation"
-              @click="createConversation"
-            >
-              {{ creatingConversation ? '创建中...' : '新建对话' }}
+            <button type="button" class="codex-soft-button" :disabled="loadingList" @click="refreshConversations">
+              刷新
             </button>
           </div>
 
@@ -621,22 +734,30 @@ function saveStorage(key, value) {
               :key="conversation.id"
               type="button"
               class="codex-history-card"
-              :class="{ 'is-active': conversation.id === activeConversationId }"
+              :class="{
+                'is-active': conversation.id === activeConversationId,
+                'is-pending': isConversationPending(conversation.id),
+              }"
               @click="loadConversation(conversation.id)"
             >
-              <div class="codex-history-card-top">
+              <div class="codex-history-card-title-row">
                 <strong>{{ conversation.title }}</strong>
-                <span>{{ formatTime(conversation.updatedAt) }}</span>
-              </div>
-              <p>{{ conversation.lastMessagePreview || '还没有消息，试着发第一句。' }}</p>
-              <div class="codex-history-card-bottom">
-                <span>{{ conversation.messageCount }} 条消息</span>
-                <span v-if="conversation.lastError" class="codex-inline-error">有错误</span>
+                <span v-if="isConversationPending(conversation.id)" class="codex-history-pending">处理中</span>
+                <button
+                  type="button"
+                  class="codex-history-delete"
+                  aria-label="删除对话"
+                  title="删除对话"
+                  :disabled="deletingConversation"
+                  @click.stop="deleteConversation(conversation.id)"
+                >
+                  <span aria-hidden="true">🗑</span>
+                </button>
               </div>
             </button>
 
             <div v-if="!conversations.length && !loadingList" class="codex-empty-card codex-empty-card--sidebar">
-              <p>还没有历史对话，点上面的“新建对话”就可以开始。</p>
+              <p>还没有历史对话，开始提问后会自动出现在这里。</p>
             </div>
           </div>
         </div>
@@ -733,32 +854,17 @@ function saveStorage(key, value) {
           </div>
         </header>
 
-        <div class="codex-conversation-bar" :class="{ 'is-elevated': hasScrolledMessages }">
-          <div class="codex-conversation-meta">
-            <p class="codex-conversation-path">{{ activeWorkingDirectory }}</p>
-            <h1>{{ activeTitle }}</h1>
-            <div class="codex-context-chips">
-              <span class="codex-context-chip">模型 {{ selectedModelLabel }}</span>
-              <span class="codex-context-chip">Sandbox {{ sandboxMode }}</span>
-              <span class="codex-context-chip">Approval {{ approvalPolicy }}</span>
-            </div>
-          </div>
-          <button
-            v-if="activeConversationId"
-            type="button"
-            class="codex-soft-button codex-soft-button--danger"
-            :disabled="deletingConversation"
-            @click="deleteConversation(activeConversationId)"
-          >
-            {{ deletingConversation ? '删除中...' : '删除' }}
-          </button>
-        </div>
-
         <section ref="messageViewport" class="codex-stage-scroll" @scroll="updateScrollIndicators">
           <div v-if="!hasMessages" class="codex-welcome">
             <p class="codex-welcome-kicker">Connected to your local Codex service</p>
             <h2>有什么可以帮忙的？</h2>
             <p>让 Codex 帮你读代码、分析问题、制定计划，或者直接推动一个实现方案。</p>
+
+            <div class="codex-context-chips codex-context-chips--center">
+              <span class="codex-context-chip">{{ activeWorkingDirectory }}</span>
+              <span class="codex-context-chip">模型 {{ selectedModelLabel }}</span>
+              <span class="codex-context-chip">Sandbox {{ sandboxMode }}</span>
+            </div>
 
             <div class="codex-suggestion-grid">
               <button
@@ -779,36 +885,67 @@ function saveStorage(key, value) {
               v-for="message in activeMessages"
               :key="message.id"
               class="codex-message-card"
-              :class="`codex-message-card--${message.role}`"
+              :class="[
+                `codex-message-card--${message.role}`,
+                { 'is-editing': editingMessageId === message.id },
+              ]"
             >
               <div class="codex-message-head">
                 <span class="codex-message-author">{{ message.role === 'user' ? '你' : 'Codex' }}</span>
                 <time>{{ formatTime(message.createdAt) }}</time>
               </div>
 
-              <div class="codex-message-content">
-                <template
-                  v-for="(segment, segmentIndex) in parseMessageSegments(message.content)"
-                  :key="`${message.id}-${segmentIndex}`"
-                >
-                  <p v-if="segment.type === 'text'" class="codex-message-text">{{ segment.content }}</p>
-                  <div v-else class="codex-code-block">
-                    <div class="codex-code-block-head">
-                      <span>{{ segment.language || 'code' }}</span>
-                      <button type="button" class="codex-code-copy" @click="copyText(segment.content)">复制</button>
+              <template v-if="message.role === 'user' && editingMessageId === message.id">
+                <div class="codex-message-edit-wrap">
+                  <textarea
+                    v-model="editingMessageContent"
+                    class="codex-message-edit-input"
+                    rows="4"
+                    :disabled="activeConversationPending"
+                    @keydown="handleEditComposerKeydown"
+                  />
+                  <div class="codex-message-edit-footer">
+                    <span>编辑后将作为新消息发送</span>
+                    <div class="codex-message-edit-actions">
+                      <button type="button" class="codex-message-inline-button" @click="cancelEditingMessage">取消</button>
+                      <button
+                        type="button"
+                        class="codex-message-inline-button codex-message-inline-button--primary"
+                        :disabled="activeConversationPending || !editingMessageContent.trim()"
+                        @click="submitEditedMessage"
+                      >
+                        {{ activeConversationPending ? '发送中...' : '发送' }}
+                      </button>
                     </div>
-                    <pre><code>{{ segment.content }}</code></pre>
                   </div>
-                </template>
-              </div>
+                </div>
+              </template>
+              <div
+                v-else
+                class="codex-message-content codex-markdown"
+                v-html="renderMarkdown(message.content)"
+                @click="handleMessageContentClick"
+              />
 
               <p v-if="message.usage" class="codex-message-usage">
                 input {{ message.usage.input_tokens }} · cached {{ message.usage.cached_input_tokens }} · output {{ message.usage.output_tokens }}
               </p>
+
+              <div v-if="message.role === 'user' && editingMessageId !== message.id" class="codex-message-actions">
+                <button
+                  type="button"
+                  class="codex-message-edit-button"
+                  aria-label="编辑消息"
+                  title="编辑消息"
+                  @click="startEditingMessage(message)"
+                >
+                  <span aria-hidden="true">✎</span>
+                </button>
+              </div>
             </article>
           </div>
 
-          <div v-if="sending" class="codex-thinking-row">
+          <div v-if="activeConversationPending" class="codex-thinking-row">
             <div class="codex-thinking-dots">
               <span class="codex-thinking-dot" />
               <span class="codex-thinking-dot" />
@@ -831,12 +968,12 @@ function saveStorage(key, value) {
             v-model="draft"
             class="codex-composer-input"
             placeholder="问问 Codex：读这个项目、找问题、给方案，或者直接开始实现"
-            :disabled="sending"
+            :disabled="activeConversationPending"
             rows="1"
             @keydown="handleComposerKeydown"
           />
-          <button type="submit" class="codex-composer-send" :disabled="sending || !draft.trim()">
-            {{ sending ? '…' : '↑' }}
+          <button type="submit" class="codex-composer-send" :disabled="activeConversationPending || !draft.trim()">
+            {{ activeConversationPending ? '…' : '↑' }}
           </button>
         </form>
       </section>
