@@ -731,6 +731,12 @@ select {
   color: #fff;
 }
 
+.codex-round-button--subtle {
+  background: rgba(255, 255, 255, 0.72);
+  color: #475467;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+}
+
 .codex-pill-button {
   border: none;
   border-radius: 999px;

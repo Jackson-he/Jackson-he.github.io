@@ -850,7 +850,15 @@ function createMarkdownRenderer() {
               {{ serviceStateText }}
             </button>
             <button type="button" class="codex-round-button" @click="toggleDrawer('settings')">⚙</button>
-            <button type="button" class="codex-round-button codex-round-button--dark" @click="createConversation">＋</button>
+            <button
+              type="button"
+              class="codex-round-button codex-round-button--subtle"
+              aria-label="新建对话"
+              title="新建对话"
+              @click="createConversation"
+            >
+              ＋
+            </button>
           </div>
         </header>
 
