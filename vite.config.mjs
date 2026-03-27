@@ -31,5 +31,6 @@ export default defineConfig({
         codexChatRedirect: resolve(rootDir, 'projects/codex-chat/index.html'),
       },
     },
+    external: ["markdown-it"],
   },
 })
