@@ -30,7 +30,7 @@ export default defineConfig({
         futuresMonitorRedirect: resolve(rootDir, 'projects/futures-monitor/index.html'),
         codexChatRedirect: resolve(rootDir, 'projects/codex-chat/index.html'),
       },
-    },
-    external: ["markdown-it"],
+      external: ["markdown-it"],
+    }
   },
 })
