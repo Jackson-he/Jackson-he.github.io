@@ -7,7 +7,7 @@ const rootDir = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   root: rootDir,
-  base: './',
+  base: '/',
   plugins: [vue()],
   resolve: {
     alias: {

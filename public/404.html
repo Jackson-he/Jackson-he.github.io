@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>页面跳转中</title>
+</head>
+<body>
+    <script>
+        (function redirectToAppEntry() {
+            const { pathname, search, hash } = window.location;
+
+            if (pathname === '/404.html') {
+                return;
+            }
+
+            const params = new URLSearchParams();
+            params.set('__gh_path__', pathname);
+
+            if (search.length > 1) {
+                params.set('__gh_query__', search.slice(1));
+            }
+
+            if (hash.length > 1) {
+                params.set('__gh_hash__', hash.slice(1));
+            }
+
+            window.location.replace(`/?${params.toString()}`);
+        }());
+    </script>
+    <p>页面跳转中...</p>
+</body>
+</html>

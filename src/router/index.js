@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '@/pages/HomePage.vue'
 import CompliancePage from '@/pages/CompliancePage.vue'
 import EnglishHomePage from '@/pages/EnglishHomePage.vue'
@@ -11,72 +11,123 @@ import FuturesMonitorPage from '@/pages/FuturesMonitorPage.vue'
 import CodexChatPage from '@/pages/CodexChatPage.vue'
 import ItalyTripMapPage from '@/pages/ItalyTripMapPage.vue'
 
+const SITE_NAME = 'Jackson He'
+const SITE_URL = 'https://jackson-he.github.io'
+const DEFAULT_IMAGE = `${SITE_URL}/social-share-cover.png`
+const DEFAULT_META = {
+  title: 'Jackson He - 项目展示',
+  description: 'Jackson He 的项目展示站点，包含内容合规检测、英语积累系统、赛事预测和工具应用。',
+  sharePath: '/',
+}
+
 const routes = [
   {
     path: '/',
     name: 'home',
     component: HomePage,
-    meta: { title: 'Jackson He - 项目展示' },
+    meta: {
+      title: 'Jackson He - 项目展示',
+      description: DEFAULT_META.description,
+      sharePath: '/',
+    },
   },
   {
     path: '/projects/game',
     name: 'compliance',
     component: CompliancePage,
-    meta: { title: '内容合规检测 - Jackson He' },
+    meta: {
+      title: '内容合规检测 - Jackson He',
+      description: '基于 AI 模型的文本合规检测页，支持单条和批量检测。',
+      sharePath: '/projects/game/',
+    },
   },
   {
     path: '/projects/data-viz',
     name: 'english-home',
     component: EnglishHomePage,
-    meta: { title: '英语积累系统 - Jackson He' },
+    meta: {
+      title: '英语积累系统 - Jackson He',
+      description: '五大英语表达模式，支持模式浏览、例句展示与快速定位。',
+      sharePath: '/projects/data-viz/',
+    },
   },
   {
     path: '/projects/data-viz/mode/:modeId',
     name: 'english-mode',
     component: EnglishModeListPage,
-    meta: { title: '模式列表 - 英语积累系统' },
+    meta: {
+      title: '模式列表 - 英语积累系统',
+      description: '英语表达模式列表页，按模式查看常见句型、功能和例句。',
+    },
   },
   {
     path: '/projects/data-viz/mode/:modeId/pattern/:patternIndex',
     name: 'english-pattern',
     component: EnglishPatternDetailPage,
-    meta: { title: '模式详情 - 英语积累系统' },
+    meta: {
+      title: '模式详情 - 英语积累系统',
+      description: '英语表达模式详情页，展示具体句型、功能说明与例句。',
+    },
   },
   {
     path: '/projects/creative',
     name: 'sport-prediction',
     component: SportPredictionPage,
-    meta: { title: '赛事预测查询 - Jackson He' },
+    meta: {
+      title: '赛事预测查询 - Jackson He',
+      description: '连接预测 API 的足球赛事看板，涵盖比赛、推荐、历史与对比。',
+      sharePath: '/projects/creative/',
+    },
   },
   {
     path: '/projects/stock-transition',
     name: 'stock-transition',
     component: StockTransitionPage,
-    meta: { title: 'Stock Transition - Jackson He' },
+    meta: {
+      title: 'Stock Transition - Jackson He',
+      description: '部署到 GitHub Pages 的美股趋势突破监控面板，连接独立后端 API。',
+      sharePath: '/projects/stock-transition/',
+    },
   },
   {
     path: '/projects/futures-monitor',
     name: 'futures-monitor',
     component: FuturesMonitorPage,
-    meta: { title: '期货实时监控 - Jackson He' },
+    meta: {
+      title: '期货实时监控 - Jackson He',
+      description: '期货终端风格前端界面，支持实时和演示 K 线、指标叠加与资金信号面板。',
+      sharePath: '/projects/futures-monitor/',
+    },
   },
   {
     path: '/projects/tools',
     name: 'tools',
     component: ToolsPage,
-    meta: { title: '工具应用 - Jackson He' },
+    meta: {
+      title: '工具应用 - Jackson He',
+      description: '集中展示可独立部署的小工具页，包含股票趋势、期货监控、行程地图和 Codex Chat。',
+      sharePath: '/projects/tools/',
+    },
   },
   {
     path: '/projects/italy-trip-map',
     name: 'italy-trip-map',
     component: ItalyTripMapPage,
-    meta: { title: '意大利旅行地图 - Jackson He' },
+    meta: {
+      title: '意大利旅行地图 - Jackson He',
+      description: '把意大利婚纱照行程可视化到地图里，支持点位筛选、路线查看和每日节奏概览。',
+      sharePath: '/projects/italy-trip-map/',
+    },
   },
   {
     path: '/projects/codex-chat',
     name: 'codex-chat',
     component: CodexChatPage,
-    meta: { title: 'Codex Chat - Jackson He' },
+    meta: {
+      title: 'Codex Chat - Jackson He',
+      description: '基于 Codex SDK 的本地聊天工作台，支持历史会话和项目目录上下文。',
+      sharePath: '/projects/codex-chat/',
+    },
   },
   {
     path: '/:pathMatch(.*)*',
@@ -85,17 +136,69 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHashHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
   scrollBehavior() {
     return { top: 0 }
   },
 })
 
-router.afterEach((to) => {
-  if (to.meta?.title) {
-    document.title = to.meta.title
+function ensureMeta(attribute, key, content) {
+  let element = document.head.querySelector(`meta[${attribute}="${key}"]`)
+  if (!element) {
+    element = document.createElement('meta')
+    element.setAttribute(attribute, key)
+    document.head.appendChild(element)
   }
+  element.setAttribute('content', content)
+}
+
+function ensureLink(rel, href) {
+  let element = document.head.querySelector(`link[rel="${rel}"]`)
+  if (!element) {
+    element = document.createElement('link')
+    element.setAttribute('rel', rel)
+    document.head.appendChild(element)
+  }
+  element.setAttribute('href', href)
+}
+
+function buildSharePath(to) {
+  if (to.name === 'english-mode') {
+    const modeId = encodeURIComponent(to.params.modeId || 'mode1')
+    return `/projects/data-viz/mode/${modeId}`
+  }
+
+  if (to.name === 'english-pattern') {
+    const modeId = encodeURIComponent(to.params.modeId || 'mode1')
+    const patternIndex = encodeURIComponent(to.params.patternIndex || '0')
+    return `/projects/data-viz/mode/${modeId}/pattern/${patternIndex}`
+  }
+
+  return to.meta?.sharePath || DEFAULT_META.sharePath
+}
+
+router.afterEach((to) => {
+  const title = to.meta?.title || DEFAULT_META.title
+  const description = to.meta?.description || DEFAULT_META.description
+  const shareUrl = new URL(buildSharePath(to), `${SITE_URL}/`).toString()
+  const image = to.meta?.image || DEFAULT_IMAGE
+
+  document.title = title
+  ensureMeta('name', 'description', description)
+  ensureMeta('property', 'og:type', 'website')
+  ensureMeta('property', 'og:site_name', SITE_NAME)
+  ensureMeta('property', 'og:locale', 'zh_CN')
+  ensureMeta('property', 'og:title', title)
+  ensureMeta('property', 'og:description', description)
+  ensureMeta('property', 'og:url', shareUrl)
+  ensureMeta('property', 'og:image', image)
+  ensureMeta('property', 'og:image:alt', 'Jackson He Project Showcase')
+  ensureMeta('name', 'twitter:card', 'summary_large_image')
+  ensureMeta('name', 'twitter:title', title)
+  ensureMeta('name', 'twitter:description', description)
+  ensureMeta('name', 'twitter:image', image)
+  ensureLink('canonical', shareUrl)
 })
 
 export default router

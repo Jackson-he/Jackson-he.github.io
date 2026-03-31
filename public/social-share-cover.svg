@@ -1,0 +1,32 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="90" y1="40" x2="1090" y2="590" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#081D2C"/>
+      <stop offset="0.48" stop-color="#123751"/>
+      <stop offset="1" stop-color="#175C4D"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="215" y1="118" x2="978" y2="515" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8CF5D3" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#F7DE8C" stop-opacity="0.86"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" rx="32" fill="url(#bg)"/>
+  <circle cx="1028" cy="126" r="138" fill="#8CF5D3" fill-opacity="0.12"/>
+  <circle cx="127" cy="570" r="180" fill="#F7DE8C" fill-opacity="0.08"/>
+  <rect x="84" y="86" width="168" height="168" rx="36" fill="url(#accent)"/>
+  <path d="M152 129C134.327 129 120 143.327 120 161V179C120 196.673 134.327 211 152 211H184C201.673 211 216 196.673 216 179V161C216 143.327 201.673 129 184 129H152ZM146 161C146 157.686 148.686 155 152 155H184C187.314 155 190 157.686 190 161V179C190 182.314 187.314 185 184 185H152C148.686 185 146 182.314 146 179V161Z" fill="#0A2231"/>
+  <path d="M279 160H528" stroke="#8CF5D3" stroke-width="10" stroke-linecap="round"/>
+  <path d="M279 196H622" stroke="#F4E9B2" stroke-width="10" stroke-linecap="round" stroke-opacity="0.86"/>
+  <text x="84" y="344" fill="#F7FAFC" font-family="Avenir Next, Segoe UI, Helvetica, Arial, sans-serif" font-size="74" font-weight="700" letter-spacing="0.6">
+    Jackson He
+  </text>
+  <text x="84" y="422" fill="#C8F4E7" font-family="Avenir Next, Segoe UI, Helvetica, Arial, sans-serif" font-size="40" font-weight="500">
+    Project Showcase
+  </text>
+  <text x="84" y="500" fill="#E9F0F5" font-family="Avenir Next, Segoe UI, Helvetica, Arial, sans-serif" font-size="28" font-weight="400">
+    AI tools, dashboards, learning pages, and demo products
+  </text>
+  <text x="84" y="560" fill="#C2D7E3" font-family="Avenir Next, Segoe UI, Helvetica, Arial, sans-serif" font-size="22" font-weight="500" letter-spacing="2.6">
+    JACKSON-HE.GITHUB.IO
+  </text>
+</svg>

@@ -3,14 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>正在跳转 - 模式详情</title>
+    <meta name="description" content="英语表达模式详情页，展示具体句型、功能说明与例句。">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Jackson He">
+    <meta property="og:locale" content="zh_CN">
+    <meta property="og:title" content="模式详情 - 英语积累系统">
+    <meta property="og:description" content="英语表达模式详情页，展示具体句型、功能说明与例句。">
+    <meta property="og:url" content="https://jackson-he.github.io/projects/data-viz/pattern-detail.html">
+    <meta property="og:image" content="https://jackson-he.github.io/social-share-cover.png">
+    <meta property="og:image:alt" content="Jackson He Project Showcase">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="模式详情 - 英语积累系统">
+    <meta name="twitter:description" content="英语表达模式详情页，展示具体句型、功能说明与例句。">
+    <meta name="twitter:image" content="https://jackson-he.github.io/social-share-cover.png">
+    <link rel="canonical" href="https://jackson-he.github.io/projects/data-viz/pattern-detail.html">
+    <title>模式详情 - 英语积累系统</title>
 </head>
 <body>
     <script>
         const params = new URLSearchParams(window.location.search);
         const mode = params.get('mode') || 'mode1';
         const pattern = params.get('pattern') || '0';
-        window.location.replace(`../../index.html#/projects/data-viz/mode/${mode}/pattern/${pattern}`);
+        window.history.replaceState(
+            null,
+            '',
+            `/projects/data-viz/mode/${encodeURIComponent(mode)}/pattern/${encodeURIComponent(pattern)}`
+        );
     </script>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
 </body>
 </html>

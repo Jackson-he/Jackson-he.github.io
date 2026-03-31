@@ -34,14 +34,20 @@ Jackson-he.github.io/
 │   │   └── ToolsPage.vue
 │   └── styles.css                # 全局样式
 ├── projects/
-│   ├── creative/index.html       # 旧路径兼容跳转页
+│   ├── creative/index.html       # history 模式入口页
 │   ├── data-viz/
 │   │   ├── data.js               # 英语积累系统静态数据
-│   │   ├── index.html            # 旧路径兼容跳转页
-│   │   ├── mode-list.html        # 旧路径兼容跳转页
-│   │   └── pattern-detail.html   # 旧路径兼容跳转页
-│   ├── game/index.html           # 旧路径兼容跳转页
-│   └── tools/index.html          # 旧路径兼容跳转页
+│   │   ├── index.html            # history 模式入口页
+│   │   ├── mode-list.html        # 英语模式分享入口页
+│   │   └── pattern-detail.html   # 英语详情分享入口页
+│   ├── game/index.html           # history 模式入口页
+│   └── tools/index.html          # history 模式入口页
+├── public/
+│   ├── 404.html                  # GitHub Pages history 回退页
+│   ├── social-share-cover.png    # 分享卡片封面图
+│   └── social-share-cover.svg    # 分享卡片矢量源图
+├── scripts/
+│   └── generate-share-cover.mjs  # 生成分享封面图
 └── dist/                         # 本地构建产物（已忽略）
 ```
 
@@ -77,19 +83,20 @@ npm run build
 
 ## 路由说明
 
-- `/#/`：首页
-- `/#/projects/game`：内容合规检测
-- `/#/projects/data-viz`：英语积累系统
-- `/#/projects/data-viz/mode/:modeId`：英语模式列表
-- `/#/projects/data-viz/mode/:modeId/pattern/:patternIndex`：英语模式详情
-- `/#/projects/creative`：赛事预测查询
-- `/#/projects/tools`：工具应用
+- `/`：首页
+- `/projects/game`：内容合规检测
+- `/projects/data-viz`：英语积累系统
+- `/projects/data-viz/mode/:modeId`：英语模式列表
+- `/projects/data-viz/mode/:modeId/pattern/:patternIndex`：英语模式详情
+- `/projects/creative`：赛事预测查询
+- `/projects/tools`：工具应用
 
-保留了旧的 HTML 路径，并通过跳转页兼容旧链接。
+GitHub Pages 下为保证 history 模式可刷新和可直达，仓库额外提供了 `public/404.html` 回退页。
+其中固定项目页通过多入口 HTML 直接挂载应用；英语模式详情保留了 `mode-list.html` 和 `pattern-detail.html` 作为分享入口页。
 
 
 ## Stock Transition
 
-- 路由入口：`#/projects/stock-transition`
+- 路由入口：`/projects/stock-transition`
 - GitHub Pages 部署时页面为静态前端，需要单独部署 `stock-transition` 后端 API
 - 页面支持配置 `API Base URL`，并会把该地址保存在浏览器本地存储
