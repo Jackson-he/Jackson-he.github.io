@@ -20,6 +20,12 @@ const toolProjects = [
     to: '/projects/futures-monitor',
   },
   {
+    icon: '🗺️',
+    title: 'Italy Trip Map',
+    description: '把意大利婚纱照行程可视化到高德地图里，支持点位筛选、路线查看和每日节奏概览。',
+    to: '/projects/italy-trip-map',
+  },
+  {
     icon: '⌘',
     title: 'Codex Chat',
     description: '连接本地 Codex 服务的简洁聊天界面，支持多会话历史与项目级问答。',

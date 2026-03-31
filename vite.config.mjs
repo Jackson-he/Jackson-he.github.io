@@ -29,6 +29,7 @@ export default defineConfig({
         stockTransitionRedirect: resolve(rootDir, 'projects/stock-transition/index.html'),
         futuresMonitorRedirect: resolve(rootDir, 'projects/futures-monitor/index.html'),
         codexChatRedirect: resolve(rootDir, 'projects/codex-chat/index.html'),
+        italyTripMapRedirect: resolve(rootDir, 'projects/italy-trip-map/index.html'),
       },
     }
   },

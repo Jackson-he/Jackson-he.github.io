@@ -38,9 +38,10 @@ const SUGGESTION_PROMPTS = [
 ]
 
 const MOBILE_BREAKPOINT = 980
+const STREAMING_ASSISTANT_FALLBACK_PREFIX = 'stream-assistant'
 const markdown = createMarkdownRenderer()
 
-const apiBase = ref(loadStorage(STORAGE_KEYS.apiBase, 'http://127.0.0.1:3200'))
+const apiBase = ref(resolveInitialApiBase())
 const workingDirectory = ref(loadStorage(STORAGE_KEYS.workingDirectory, '.'))
 const model = ref(loadStorage(STORAGE_KEYS.model, ''))
 const baseUrl = ref(loadStorage(STORAGE_KEYS.baseUrl, ''))
@@ -69,6 +70,7 @@ const isNearMessageBottom = ref(true)
 const editingMessageId = ref('')
 const editingMessageContent = ref('')
 const pendingConversationIds = ref([])
+const streamingAssistantIds = ref({})
 
 const normalizedApiBase = computed(() => apiBase.value.replace(/\/+$/, ''))
 const activeMessages = computed(() => activeConversation.value?.messages || [])
@@ -405,6 +407,7 @@ async function submitMessageContent(content) {
   if (!content) {
     return false
   }
+
   let conversationId = activeConversationId.value
 
   const optimisticUserMessage = {
@@ -454,25 +457,7 @@ async function submitMessageContent(content) {
       }
     }
 
-    const response = await fetch(`${normalizedApiBase.value}/api/codex/conversations/${conversationId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        content,
-        ...buildConversationPayload(),
-      }),
-    })
-    const data = await response.json().catch(() => ({}))
-
-    if (!response.ok) {
-      if (data.conversation && isActiveConversation(conversationId)) {
-        activeConversation.value = data.conversation
-      }
-      await refreshConversations()
-      throw new Error(data.error || `Request failed with status ${response.status}`)
-    }
+    const data = await requestStreamingConversationReply(conversationId, content)
 
     if (isActiveConversation(conversationId)) {
       activeConversation.value = data.conversation
@@ -485,6 +470,8 @@ async function submitMessageContent(content) {
     if (isActiveConversation(conversationId)) {
       errorMessage.value = error.message
     }
+
+    setStreamingAssistantId(conversationId, '')
 
     if (
       isActiveConversation(conversationId) &&
@@ -499,6 +486,271 @@ async function submitMessageContent(content) {
   } finally {
     setConversationPending(conversationId, false)
   }
+}
+
+async function requestStreamingConversationReply(conversationId, content) {
+  const response = await fetch(`${normalizedApiBase.value}/api/codex/conversations/${conversationId}/messages/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    },
+    body: JSON.stringify({
+      content,
+      ...buildConversationPayload(),
+    }),
+  })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    if (data.conversation && isActiveConversation(conversationId)) {
+      activeConversation.value = data.conversation
+    }
+    throw createApiError(response, data)
+  }
+
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    return requestConversationReply(conversationId, content)
+  }
+
+  let finalPayload = null
+  let receivedEvent = false
+
+  await consumeSseResponse(response.body, async ({ event, data }) => {
+    receivedEvent = true
+
+    if (event === 'assistant_start') {
+      const assistantMessage = data?.message
+      if (!assistantMessage?.id) {
+        return
+      }
+
+      setStreamingAssistantId(conversationId, assistantMessage.id)
+      upsertStreamingAssistantMessage(conversationId, assistantMessage)
+      return
+    }
+
+    if (event === 'assistant_snapshot') {
+      applyStreamingAssistantSnapshot(conversationId, data?.content || '')
+      return
+    }
+
+    if (event === 'conversation') {
+      finalPayload = data
+      setStreamingAssistantId(conversationId, '')
+      return
+    }
+
+    if (event === 'error') {
+      setStreamingAssistantId(conversationId, '')
+      if (data?.conversation && isActiveConversation(conversationId)) {
+        activeConversation.value = data.conversation
+      }
+      throw new Error(data?.error || 'Codex request failed')
+    }
+  })
+
+  if (!receivedEvent) {
+    return requestConversationReply(conversationId, content)
+  }
+
+  if (!finalPayload) {
+    throw new Error('流式响应提前结束，请检查远端服务或反向代理超时配置')
+  }
+
+  return finalPayload
+}
+
+async function requestConversationReply(conversationId, content) {
+  const response = await fetch(`${normalizedApiBase.value}/api/codex/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      content,
+      ...buildConversationPayload(),
+    }),
+  })
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    if (data.conversation && isActiveConversation(conversationId)) {
+      activeConversation.value = data.conversation
+    }
+    throw createApiError(response, data)
+  }
+
+  return data
+}
+
+async function consumeSseResponse(body, onEvent) {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+      buffer = buffer.replace(/\r\n/g, '\n')
+
+      let boundaryIndex = buffer.indexOf('\n\n')
+      while (boundaryIndex !== -1) {
+        const chunk = buffer.slice(0, boundaryIndex)
+        buffer = buffer.slice(boundaryIndex + 2)
+        const parsed = parseSseChunk(chunk)
+        if (parsed) {
+          await onEvent(parsed)
+        }
+        boundaryIndex = buffer.indexOf('\n\n')
+      }
+
+      if (done) {
+        const trailing = buffer.trim()
+        if (trailing) {
+          const parsed = parseSseChunk(trailing)
+          if (parsed) {
+            await onEvent(parsed)
+          }
+        }
+        break
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+function parseSseChunk(chunk) {
+  const normalized = chunk.trim()
+  if (!normalized) {
+    return null
+  }
+
+  let event = 'message'
+  const dataLines = []
+
+  for (const line of normalized.split('\n')) {
+    if (!line || line.startsWith(':')) {
+      continue
+    }
+
+    if (line.startsWith('event:')) {
+      event = line.slice(6).trim()
+      continue
+    }
+
+    if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5).trimStart())
+    }
+  }
+
+  if (!dataLines.length) {
+    return null
+  }
+
+  const payloadText = dataLines.join('\n')
+
+  try {
+    return {
+      event,
+      data: JSON.parse(payloadText),
+    }
+  } catch {
+    return {
+      event,
+      data: { text: payloadText },
+    }
+  }
+}
+
+function upsertStreamingAssistantMessage(conversationId, message) {
+  if (!isActiveConversation(conversationId)) {
+    return
+  }
+
+  const currentConversation = activeConversation.value
+  if (!currentConversation || currentConversation.id !== conversationId) {
+    return
+  }
+
+  const messages = currentConversation.messages || []
+  const existingIndex = messages.findIndex((item) => item.id === message.id)
+  const nextMessages = [...messages]
+
+  if (existingIndex === -1) {
+    nextMessages.push(message)
+  } else {
+    nextMessages[existingIndex] = {
+      ...nextMessages[existingIndex],
+      ...message,
+    }
+  }
+
+  activeConversation.value = {
+    ...currentConversation,
+    messages: nextMessages,
+  }
+}
+
+function applyStreamingAssistantSnapshot(conversationId, content) {
+  if (!isActiveConversation(conversationId)) {
+    return
+  }
+
+  const currentConversation = activeConversation.value
+  if (!currentConversation || currentConversation.id !== conversationId) {
+    return
+  }
+
+  const messages = [...(currentConversation.messages || [])]
+  const streamingAssistantId = getStreamingAssistantId(conversationId)
+  let messageIndex = streamingAssistantId
+    ? messages.findIndex((message) => message.id === streamingAssistantId)
+    : -1
+
+  if (messageIndex === -1) {
+    const fallbackMessage = {
+      id: `${STREAMING_ASSISTANT_FALLBACK_PREFIX}-${Date.now()}`,
+      role: 'assistant',
+      content: '',
+      createdAt: new Date().toISOString(),
+    }
+    messages.push(fallbackMessage)
+    messageIndex = messages.length - 1
+    setStreamingAssistantId(conversationId, fallbackMessage.id)
+  }
+
+  messages[messageIndex] = {
+    ...messages[messageIndex],
+    content,
+  }
+
+  activeConversation.value = {
+    ...currentConversation,
+    messages,
+  }
+}
+
+function getStreamingAssistantId(conversationId) {
+  return streamingAssistantIds.value[conversationId] || ''
+}
+
+function setStreamingAssistantId(conversationId, messageId) {
+  if (!conversationId) {
+    return
+  }
+
+  const next = { ...streamingAssistantIds.value }
+
+  if (messageId) {
+    next[conversationId] = messageId
+  } else {
+    delete next[conversationId]
+  }
+
+  streamingAssistantIds.value = next
 }
 
 function resizeComposerInput() {
@@ -607,6 +859,10 @@ function buildConversationTitle(content) {
   return content.replace(/\s+/g, ' ').trim().slice(0, 24) || '新对话'
 }
 
+function compactText(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 async function apiCall(path, options = {}) {
   const response = await fetch(`${normalizedApiBase.value}${path}`, {
     headers: {
@@ -619,10 +875,66 @@ async function apiCall(path, options = {}) {
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new Error(data.error || `Request failed with status ${response.status}`)
+    throw createApiError(response, data)
   }
 
   return data
+}
+
+function createApiError(response, data = {}) {
+  const message = compactText(data?.error)
+  if (message) {
+    return new Error(message)
+  }
+
+  if (response.status === 504) {
+    return new Error('Request failed with status 504，远端网关超时，请检查反向代理超时和上游模型配置')
+  }
+
+  if (response.status === 502) {
+    return new Error('Request failed with status 502，远端反向代理没有连上 codex-service')
+  }
+
+  return new Error(`Request failed with status ${response.status}`)
+}
+
+function resolveInitialApiBase() {
+  const fromQuery = readApiBaseFromQuery()
+  if (fromQuery) {
+    return fromQuery
+  }
+
+  return loadStorage(STORAGE_KEYS.apiBase, resolveDefaultApiBase())
+}
+
+function resolveDefaultApiBase() {
+  const envBase = compactText(import.meta.env?.VITE_CODEX_API_BASE)
+  if (envBase) {
+    return envBase
+  }
+
+  if (typeof window === 'undefined') {
+    return 'http://127.0.0.1:3200'
+  }
+
+  const { protocol, hostname, origin } = window.location
+  if ((protocol === 'http:' || protocol === 'https:') && hostname && !isLocalHostname(hostname)) {
+    return origin
+  }
+
+  return 'http://127.0.0.1:3200'
+}
+
+function readApiBaseFromQuery() {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+
+  return compactText(new URLSearchParams(window.location.search).get('apiBase'))
+}
+
+function isLocalHostname(hostname) {
+  return ['localhost', '127.0.0.1', '0.0.0.0'].includes(hostname)
 }
 
 function loadStorage(key, fallbackValue) {

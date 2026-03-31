@@ -9,6 +9,7 @@ import ToolsPage from '@/pages/ToolsPage.vue'
 import StockTransitionPage from '@/pages/StockTransitionPage.vue'
 import FuturesMonitorPage from '@/pages/FuturesMonitorPage.vue'
 import CodexChatPage from '@/pages/CodexChatPage.vue'
+import ItalyTripMapPage from '@/pages/ItalyTripMapPage.vue'
 
 const routes = [
   {
@@ -64,6 +65,12 @@ const routes = [
     name: 'tools',
     component: ToolsPage,
     meta: { title: '工具应用 - Jackson He' },
+  },
+  {
+    path: '/projects/italy-trip-map',
+    name: 'italy-trip-map',
+    component: ItalyTripMapPage,
+    meta: { title: '意大利旅行地图 - Jackson He' },
   },
   {
     path: '/projects/codex-chat',
