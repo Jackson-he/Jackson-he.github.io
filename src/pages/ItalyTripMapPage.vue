@@ -80,7 +80,7 @@ const overlayMessage = computed(() => {
 })
 
 watchEffect(() => {
-  document.title = '意大利旅行地图 - Jackson He'
+  document.title = '意大利旅行地图'
 })
 
 watch(

@@ -23,7 +23,7 @@ const examples = [
 ]
 
 watchEffect(() => {
-  document.title = '内容合规检测 - Jackson He'
+  document.title = '内容合规检测'
 })
 
 const singleConfidence = computed(() => toPercent(getMaxProbability(singleResult.value?.label_details)))

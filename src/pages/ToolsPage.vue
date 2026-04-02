@@ -3,7 +3,7 @@ import { RouterLink } from 'vue-router'
 import { watchEffect } from 'vue'
 
 watchEffect(() => {
-  document.title = '工具应用 - Jackson He'
+  document.title = '工具应用'
 })
 
 const toolProjects = [

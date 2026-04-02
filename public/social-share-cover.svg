@@ -18,15 +18,15 @@
   <path d="M279 160H528" stroke="#8CF5D3" stroke-width="10" stroke-linecap="round"/>
   <path d="M279 196H622" stroke="#F4E9B2" stroke-width="10" stroke-linecap="round" stroke-opacity="0.86"/>
   <text x="84" y="344" fill="#F7FAFC" font-family="Avenir Next, Segoe UI, Helvetica, Arial, sans-serif" font-size="74" font-weight="700" letter-spacing="0.6">
-    Jackson He
-  </text>
-  <text x="84" y="422" fill="#C8F4E7" font-family="Avenir Next, Segoe UI, Helvetica, Arial, sans-serif" font-size="40" font-weight="500">
     Project Showcase
   </text>
+  <text x="84" y="422" fill="#C8F4E7" font-family="Avenir Next, Segoe UI, Helvetica, Arial, sans-serif" font-size="40" font-weight="500">
+    AI Tools & Interactive Demos
+  </text>
   <text x="84" y="500" fill="#E9F0F5" font-family="Avenir Next, Segoe UI, Helvetica, Arial, sans-serif" font-size="28" font-weight="400">
-    AI tools, dashboards, learning pages, and demo products
+    Dashboards, learning pages, maps, and utility apps
   </text>
   <text x="84" y="560" fill="#C2D7E3" font-family="Avenir Next, Segoe UI, Helvetica, Arial, sans-serif" font-size="22" font-weight="500" letter-spacing="2.6">
-    JACKSON-HE.GITHUB.IO
+    PROJECT PORTAL
   </text>
 </svg>

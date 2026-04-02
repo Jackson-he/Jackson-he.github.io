@@ -1,6 +1,6 @@
-# Jackson He - Vue 3 项目展示网站
+# Vue 3 项目展示网站
 
-这是 `Jackson-he.github.io` 的 Vue 3 重构版本，使用 `Vite + Vue Router` 管理首页和各个项目页面，并通过 GitHub Actions 自动发布到 GitHub Pages。
+这是当前站点的 Vue 3 重构版本，使用 `Vite + Vue Router` 管理首页和各个项目页面，并通过 GitHub Actions 自动发布到 GitHub Pages。
 
 ## 技术栈
 

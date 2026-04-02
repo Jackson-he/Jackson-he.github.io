@@ -51,8 +51,7 @@ const projects = [
   <main class="page page--dark">
     <div class="page-container">
       <section class="hero hero--center">
-        <p class="eyebrow">Project Showcase</p>
-        <h1 class="hero-title hero-title--gradient">Jay He</h1>
+        <p class="eyebrow">精选项目</p>
       </section>
 
       <section class="project-grid">
@@ -70,7 +69,7 @@ const projects = [
       </section>
 
       <footer class="page-footer">
-        <p>© {{ year }} Jackson He</p>
+        <p>© {{ year }}</p>
         <p>
           <a href="https://github.com/Jackson-he" target="_blank" rel="noopener noreferrer">GitHub</a>
         </p>

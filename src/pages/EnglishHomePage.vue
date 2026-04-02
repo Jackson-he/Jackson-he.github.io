@@ -3,7 +3,7 @@ import { computed, watchEffect } from 'vue'
 import { modesData } from '../../projects/data-viz/data.js'
 
 watchEffect(() => {
-  document.title = '英语积累系统 - Jackson He'
+  document.title = '英语积累系统'
 })
 
 const modes = computed(() =>

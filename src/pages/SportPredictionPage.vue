@@ -42,7 +42,7 @@ const historyState = reactive({
 const apiBase = computed(() => apiUrl.value.trim() || 'http://localhost:3001')
 
 watchEffect(() => {
-  document.title = '赛事预测查询 - Jackson He'
+  document.title = '赛事预测查询'
 })
 
 const historyStatistics = computed(() => Object.entries(historyState.statistics || {}))

@@ -69,6 +69,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // 添加控制台彩蛋
-    console.log('%c👋 欢迎来到 Jackson He 的项目展示页！', 'font-size: 20px; font-weight: bold; color: #667eea;');
-    console.log('%c如果你对这些项目感兴趣，欢迎联系我！', 'font-size: 14px; color: #94a3b8;');
+    console.log('%c👋 欢迎来到项目展示页！', 'font-size: 20px; font-weight: bold; color: #667eea;');
+    console.log('%c如果你对这些项目感兴趣，欢迎继续探索。', 'font-size: 14px; color: #94a3b8;');
 });
