@@ -9,6 +9,9 @@ export default defineConfig({
   root: rootDir,
   base: '/',
   plugins: [vue()],
+  server: {
+    host: '0.0.0.0',
+  },
   resolve: {
     alias: {
       '@': resolve(rootDir, 'src'),
@@ -30,6 +33,7 @@ export default defineConfig({
         futuresMonitorRedirect: resolve(rootDir, 'projects/futures-monitor/index.html'),
         codexChatRedirect: resolve(rootDir, 'projects/codex-chat/index.html'),
         italyTripMapRedirect: resolve(rootDir, 'projects/italy-trip-map/index.html'),
+        italyTravelCompanionRedirect: resolve(rootDir, 'projects/italy-travel-companion/index.html'),
       },
     }
   },

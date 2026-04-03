@@ -10,6 +10,9 @@ import StockTransitionPage from '@/pages/StockTransitionPage.vue'
 import FuturesMonitorPage from '@/pages/FuturesMonitorPage.vue'
 import CodexChatPage from '@/pages/CodexChatPage.vue'
 import ItalyTripMapPage from '@/pages/ItalyTripMapPage.vue'
+import ItalyTravelCompanionPage from '@/pages/ItalyTravelCompanionPage.vue'
+import ItalyTravelPage2 from '@/pages/ItalyTravelPage-2.vue'
+import ItalyThreePage from '@/pages/Italy-3.vue'
 
 const SITE_NAME = '项目展示'
 const SITE_URL = 'https://jackson-he.github.io'
@@ -117,6 +120,36 @@ const routes = [
       title: '意大利旅行地图',
       description: '把意大利婚纱照行程可视化到地图里，支持点位筛选、路线查看和每日节奏概览。',
       sharePath: '/projects/italy-trip-map/',
+    },
+  },
+  {
+    path: '/projects/italy-1',
+    name: 'italy-travel-companion',
+    component: ItalyTravelCompanionPage,
+    meta: {
+      title: '意大利出行工具',
+      description: '个人使用的意大利出行工具，把 Today、Map、Tickets、Transport、Trip 放进一个移动优先工作台。',
+      sharePath: '/projects/italy-3/',
+    },
+  },
+  {
+    path: '/projects/italy-2',
+    name: 'italy-travel-2',
+    component: ItalyTravelPage2,
+    meta: {
+      title: '意大利出行工具',
+      description: '个人使用的意大利出行工具。',
+      sharePath: '/projects/italy-2/',
+    },
+  },
+  {
+    path: '/projects/italy-3',
+    name: 'italy-3',
+    component: ItalyThreePage,
+    meta: {
+      title: '意大利出行工具',
+      description: '个人意大利出行辅助工具，包含今日行程、地图、票据、交通和旅程总览。',
+      sharePath: '/projects/italy-3/',
     },
   },
   {

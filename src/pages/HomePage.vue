@@ -33,6 +33,12 @@ const projects = [
     to: '/projects/futures-monitor',
   },
   {
+    icon: '🇮🇹',
+    title: '意大利出行工具',
+    description: '个人旅行工作台，集中处理 Today、地图、票据、交通规则和全程总览。',
+    to: '/projects/italy-1',
+  },
+  {
     icon: '🛠️',
     title: '工具应用',
     description: '为后续更多工具页预留的模块化入口。',

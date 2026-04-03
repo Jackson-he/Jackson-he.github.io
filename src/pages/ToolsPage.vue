@@ -26,6 +26,12 @@ const toolProjects = [
     to: '/projects/italy-trip-map',
   },
   {
+    icon: '🇮🇹',
+    title: '意大利出行工具',
+    description: '偏个人使用的意大利旅行动线页，含 Today、Map、Tickets、Transport、Trip 五个核心入口。',
+    to: '/projects/italy-1',
+  },
+  {
     icon: '⌘',
     title: 'Codex Chat',
     description: '连接本地 Codex 服务的简洁聊天界面，支持多会话历史与项目级问答。',
