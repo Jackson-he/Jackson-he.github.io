@@ -1,5 +1,8 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const productImages = ref(['/ring-detail.jpg', '/ring-main.jpg', '/ring-side.jpg', '/ring-plain.jpg'])
 const activeImage = ref(0)
@@ -27,6 +30,7 @@ const activeCenter = computed(() => ringCenters.value[activeImage.value])
 // --- drag ---
 const dragging = ref(false)
 const bgOpacity = ref(1) // fades as ring is pulled away
+const wishSelected = ref(false) // ring is draggable only when wishlist is toggled
 const dx = ref(0)
 const dy = ref(0)
 let dragStart = { x: 0, y: 0 }
@@ -36,7 +40,16 @@ let moved = false
 const fadeThreshold = 12  // px before bg starts fading
 const fadeMaxDist   = 160 // px where bg is fully transparent
 
+function wishToggle() {
+  wishSelected.value = !wishSelected.value
+  if (!wishSelected.value) {
+    // Reset ring position when deselected
+    dx.value = 0; dy.value = 0; bgOpacity.value = 1; dragging.value = false
+  }
+}
+
 function onDown(e) {
+  if (!wishSelected.value) return
   dragging.value = true; bgOpacity.value = 1; moved = false
   dragStart = {
     x: e.touches?.[0]?.clientX ?? e.clientX,
@@ -64,8 +77,7 @@ function onMove(e) {
   dx.value = dragOff.x + (x - dragStart.x)
   dy.value = dragOff.y + (y - dragStart.y)
   const dist = Math.sqrt(dx.value ** 2 + dy.value ** 2)
-  bgOpacity.value = dist <= fadeThreshold ? 1
-    : 0
+  bgOpacity.value = dist <= fadeThreshold ? 1 : 0
 }
 
 function onUp() {
@@ -75,6 +87,13 @@ function onUp() {
   window.removeEventListener('touchend', onUp)
   window.removeEventListener('touchcancel', onUp)
   dragging.value = false
+}
+
+function onTitleClick() {
+  const dist = Math.sqrt(dx.value ** 2 + dy.value ** 2)
+  if (dist >= fadeMaxDist) {
+    router.push('/wedding')
+  }
 }
 
 function animateBack() {
@@ -143,7 +162,7 @@ function switchImg(i) {
         <!-- Draggable transparent ring overlay (PNG with alpha channel) -->
         <img
           class="ring-fly"
-          :class="{ drag: dragging }"
+          :class="{ drag: dragging, active: wishSelected }"
           :src="ringOverlays[activeImage]"
           alt=""
           draggable="false"
@@ -164,16 +183,16 @@ function switchImg(i) {
       </div>
 
       <div class="info">
-        <h1 class="title">LOVE Ring, Small Model, 1 Diamond</h1>
+        <h1 class="title" @click="onTitleClick">LOVE Ring, Small Model, 1 Diamond</h1>
         <p class="desc">The LOVE collection began with the iconic bracelet created in New York in 1969. An ode to love in its most contemporary form, the collection features a circular motif and screw details that are as modern today as when they were first imagined.</p>
         <p class="price">$2,640</p>
         <div class="actions">
           <button class="add" disabled>Add to Bag</button>
-          <button class="wish" aria-label="Wishlist">
+          <button class="wish" :class="{ on: wishSelected }" aria-label="Wishlist" @click="wishToggle">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
           </button>
         </div>
-        <p class="hint">拖动戒指到任意位置</p>
+        <!-- <p class="hint">拖动戒指到任意位置</p> -->
       </div>
     </main>
   </div>
@@ -182,7 +201,7 @@ function switchImg(i) {
 <style scoped>
 .cartier-page { max-width:100%; min-height:100vh; background:#fff; color:#181818; font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif }
 .header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-bottom:1px solid #e8e8e8; background:#fff; position:sticky; top:0; z-index:10 }
-.hdr-btn { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border:none; background:transparent; color:#181818; cursor:pointer; border-radius:50%; transition:background .2s }
+.hdr-btn { display:inline-flex; flex-direction:column; justify-content:center; width:36px; height:36px; border:none; background:transparent; color:#181818; cursor:pointer; border-radius:50%; transition:background .2s }
 .hdr-btn:hover { background:rgba(0,0,0,.04) }
 .hdr-btn b { display:block; width:16px; height:1.5px; background:#181818; margin:3px 0 }
 .logo { font-family:'Georgia','Times New Roman',serif; font-style:italic; font-size:1.6rem; color:#181818; text-decoration:none }
@@ -191,7 +210,7 @@ function switchImg(i) {
 .breadcrumb a:hover { color:#181818 }
 .breadcrumb span { color:#c0c0c0 }
 .breadcrumb--cur { color:#181818 }
-.product { display:flex; flex-wrap:wrap; max-width:1100px; margin:0 auto; padding:0 24px 60px; gap:48px }
+.product { display:flex; max-width:1100px; margin:0 auto; padding:0 24px 60px; gap:4px }
 
 /* Gallery */
 .gallery {
@@ -235,6 +254,13 @@ function switchImg(i) {
   z-index:10; cursor:grabbing;
   filter:drop-shadow(0 6px 20px rgba(0,0,0,.15));
 }
+.ring-fly.active {
+  pointer-events: auto;
+}
+.ring-fly:not(.active) {
+  cursor: default;
+  pointer-events: none;
+}
 
 /* Thumbs */
 .thumbs { display:flex; gap:10px; overflow-x:auto; padding-bottom:4px;flex-shrink: 0; }
@@ -249,16 +275,18 @@ function switchImg(i) {
 .price { margin:0; font-size:1.2rem; font-weight:600 }
 .actions { display:flex; gap:12px; margin-top:8px }
 .add { flex:1; padding:16px 24px; border:none; border-radius:6px; background:#e8e8e8; color:#999; font-size:.88rem; font-weight:500; letter-spacing:.1em; text-transform:uppercase; cursor:not-allowed }
-.wish { display:inline-flex; align-items:center; justify-content:center; width:56px; height:56px; border:1.5px solid #181818; border-radius:6px; background:transparent; color:#181818; cursor:pointer; transition:background .2s,color .2s }
+.wish { display:inline-flex; align-items:center; justify-content:center; width:56px; height:56px; border:1.5px solid #181818; border-radius:6px; background:transparent; color:#181818; cursor:pointer; transition:background .2s,color .2s,border-color .2s }
+.wish.on { background:#181818; color:#fff; border-color:#181818 }
 .wish:hover { background:#181818; color:#fff }
 .hint { margin:0; font-size:.82rem; color:#aaa }
 
 @media(max-width:768px) {
   .header { padding:12px 16px }
   .breadcrumb { padding:12px 16px; font-size:.7rem }
-  .product { flex-direction:column; padding:0 16px 40px; gap: 50px }
+  .product { flex-direction:column; padding:0 16px 40px; gap: 4px }
   .gallery { flex:none; max-width:100% }
   .info { flex:none; max-width:100% }
   .title { font-size:1.3rem }
 }
+
 </style>

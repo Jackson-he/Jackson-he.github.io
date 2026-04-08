@@ -14,6 +14,7 @@ import ItalyTravelCompanionPage from '@/pages/ItalyTravelCompanionPage.vue'
 import ItalyTravelPage2 from '@/pages/ItalyTravelPage-2.vue'
 import ItalyThreePage from '@/pages/Italy-3.vue'
 import CartierPage from '@/pages/CartierPage.vue'
+import WeddingPage from '@/pages/WeddingPage.vue'
 
 
 const SITE_NAME = '项目展示'
@@ -172,6 +173,16 @@ const routes = [
       title: 'Codex Chat',
       description: '基于 Codex SDK 的本地聊天工作台，支持历史会话和项目目录上下文。',
       sharePath: '/projects/codex-chat/',
+    },
+  },
+  {
+    path: '/wedding',
+    name: 'wedding',
+    component: WeddingPage,
+    meta: {
+      title: 'Will You Marry Me?',
+      description: 'A special moment.',
+      sharePath: '/wedding/',
     },
   },
   {
