@@ -69,7 +69,7 @@ onMounted(() => {
         <div class="celebration-bg"></div>
         <div class="celebration-content">
           <h1 class="celebrate-title">She Said Yes!</h1>
-          <p class="celebrate-sub">Forever and always, Wang Ting Ting & Me</p>
+          <p class="celebrate-sub">Forever and always, Wang Ting Ting & He Xu Jie</p>
           <div class="celebrate-hearts">
             <span v-for="i in 15" :key="i" class="big-heart" :style="{ '--i': i }">♥</span>
           </div>

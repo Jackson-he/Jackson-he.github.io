@@ -1,6 +1,5 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 import MarkdownIt from 'markdown-it'
 
 const STORAGE_KEYS = {
@@ -64,6 +63,7 @@ const messageViewport = ref(null)
 const composerInput = ref(null)
 const drawerSection = ref('history')
 const isDrawerOpen = ref(false)
+const isSidebarCollapsed = ref(localStorage.getItem('codex-sidebar-collapsed') === 'true')
 const viewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWidth)
 const hasScrolledMessages = ref(false)
 const isNearMessageBottom = ref(true)
@@ -71,6 +71,7 @@ const editingMessageId = ref('')
 const editingMessageContent = ref('')
 const pendingConversationIds = ref([])
 const streamingAssistantIds = ref({})
+const showSettings = ref(false)
 
 const normalizedApiBase = computed(() => apiBase.value.replace(/\/+$/, ''))
 const activeMessages = computed(() => activeConversation.value?.messages || [])
@@ -374,6 +375,12 @@ function openDrawer(section) {
   if (!isDesktop.value) {
     isDrawerOpen.value = true
   }
+}
+
+function toggleSidebarCollapse() {
+  if (!isDesktop.value) return
+  isSidebarCollapsed.value = !isSidebarCollapsed.value
+  localStorage.setItem('codex-sidebar-collapsed', isSidebarCollapsed.value ? 'true' : 'false')
 }
 
 function closeDrawer() {
@@ -1001,38 +1008,26 @@ function createMarkdownRenderer() {
     <div class="codex-app">
       <div v-if="shouldShowDrawerOverlay" class="codex-overlay" @click="closeDrawer" />
 
-      <aside class="codex-drawer" :class="{ 'is-open': shouldShowDrawer, 'is-desktop': isDesktop }">
+      <aside class="codex-drawer" :class="{ 'is-open': shouldShowDrawer, 'is-desktop': isDesktop, 'is-collapsed': isSidebarCollapsed }">
         <div class="codex-drawer-header">
-          <div>
+          <div v-if="!isSidebarCollapsed">
             <p class="codex-drawer-kicker">Codex Workspace</p>
-            <h2>{{ drawerSection === 'history' ? '历史对话' : '连接配置' }}</h2>
           </div>
+          <button type="button" class="codex-round-button" @click="toggleSidebarCollapse" aria-label="折叠侧边栏">
+            <svg v-if="!isSidebarCollapsed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+          </button>
           <button v-if="!isDesktop" type="button" class="codex-round-button" @click="closeDrawer">✕</button>
         </div>
 
-        <div class="codex-drawer-tabs">
-          <button
-            type="button"
-            class="codex-tab-button"
-            :class="{ 'is-active': drawerSection === 'history' }"
-            @click="drawerSection = 'history'"
-          >
-            历史
+        <div class="codex-drawer-panel">
+          <button type="button" class="codex-new-chat-btn" :disabled="creatingConversation" @click="createConversation">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            新对话
           </button>
-          <button
-            type="button"
-            class="codex-tab-button"
-            :class="{ 'is-active': drawerSection === 'settings' }"
-            @click="drawerSection = 'settings'"
-          >
-            配置
-          </button>
-        </div>
-
-        <div v-if="drawerSection === 'history'" class="codex-drawer-panel">
           <div class="codex-history-toolbar">
             <div class="codex-history-summary">
-              <strong>会话列表</strong>
+              <strong>Recents</strong>
               <span>{{ conversations.length }} 条</span>
             </div>
             <button type="button" class="codex-soft-button" :disabled="loadingList" @click="refreshConversations">
@@ -1041,114 +1036,50 @@ function createMarkdownRenderer() {
           </div>
 
           <div class="codex-history-list">
-            <button
+            <div
               v-for="conversation in conversations"
               :key="conversation.id"
-              type="button"
               class="codex-history-card"
               :class="{
                 'is-active': conversation.id === activeConversationId,
                 'is-pending': isConversationPending(conversation.id),
               }"
-              @click="loadConversation(conversation.id)"
             >
               <div class="codex-history-card-title-row">
-                <strong>{{ conversation.title }}</strong>
-                <span v-if="isConversationPending(conversation.id)" class="codex-history-pending">处理中</span>
+                <button type="button" class="codex-history-card-btn" @click="loadConversation(conversation.id)">
+                  <strong>{{ conversation.title }}</strong>
+                  <span v-if="isConversationPending(conversation.id)" class="codex-history-pending">处理中</span>
+                </button>
                 <button
                   type="button"
                   class="codex-history-delete"
                   aria-label="删除对话"
                   title="删除对话"
-                  :disabled="deletingConversation"
                   @click.stop="deleteConversation(conversation.id)"
                 >
-                  <span aria-hidden="true">🗑</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 </button>
               </div>
-            </button>
+            </div>
 
             <div v-if="!conversations.length && !loadingList" class="codex-empty-card codex-empty-card--sidebar">
               <p>还没有历史对话，开始提问后会自动出现在这里。</p>
             </div>
           </div>
         </div>
-
-        <div v-else class="codex-drawer-panel codex-drawer-panel--settings">
-          <div class="codex-sidebar-card">
-            <div class="codex-sidebar-row">
-              <div>
-                <strong>服务状态</strong>
-                <p>{{ serviceStateText }}</p>
-              </div>
-              <button type="button" class="codex-soft-button" @click="refreshHealth">检查</button>
-            </div>
-            <p class="codex-settings-meta">当前 API: {{ normalizedApiBase }}</p>
-          </div>
-
-          <div class="codex-field-group">
-            <label class="codex-field-label" for="codex-api-base">服务地址</label>
-            <input id="codex-api-base" v-model="apiBase" class="codex-input" placeholder="http://127.0.0.1:3200" />
-          </div>
-
-          <div class="codex-field-group">
-            <label class="codex-field-label" for="codex-working-dir">工作目录</label>
-            <input id="codex-working-dir" v-model="workingDirectory" class="codex-input" placeholder="." />
-          </div>
-
-          <div class="codex-field-group">
-            <label class="codex-field-label" for="codex-model">模型</label>
-            <select id="codex-model" v-model="model" class="codex-select">
-              <option
-                v-for="option in availableModelOptions"
-                :key="option.value || 'default-model'"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </div>
-
-          <div class="codex-field-group">
-            <label class="codex-field-label" for="codex-base-url">Base URL</label>
-            <input id="codex-base-url" v-model="baseUrl" class="codex-input" placeholder="可选覆盖" />
-          </div>
-
-          <div class="codex-field-grid">
-            <div class="codex-field-group">
-              <label class="codex-field-label" for="codex-sandbox">Sandbox</label>
-              <select id="codex-sandbox" v-model="sandboxMode" class="codex-select">
-                <option value="read-only">read-only</option>
-                <option value="workspace-write">workspace-write</option>
-                <option value="danger-full-access">danger-full-access</option>
-              </select>
-            </div>
-
-            <div class="codex-field-group">
-              <label class="codex-field-label" for="codex-approval">Approval</label>
-              <select id="codex-approval" v-model="approvalPolicy" class="codex-select">
-                <option value="never">never</option>
-                <option value="on-request">on-request</option>
-                <option value="on-failure">on-failure</option>
-                <option value="untrusted">untrusted</option>
-              </select>
-            </div>
-          </div>
-
-          <label class="codex-switch-row">
-            <input v-model="networkAccessEnabled" type="checkbox" />
-            <span>允许网络访问</span>
-          </label>
-        </div>
       </aside>
 
       <section class="codex-stage">
         <header class="codex-topbar" :class="{ 'is-elevated': hasScrolledMessages }">
           <div class="codex-topbar-group">
-            <button type="button" class="codex-round-button" @click="toggleDrawer('history')">☰</button>
+            <button type="button" class="codex-round-button" @click="toggleDrawer('history')" aria-label="打开历史对话">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
             <button type="button" class="codex-pill-button codex-pill-button--brand" @click="openDrawer('history')">
-              <span class="codex-pill-mark">✦</span>
-              <span>Codex Chat</span>
+              <span class="codex-pill-mark">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              </span>
+              <span>Codex</span>
             </button>
           </div>
 
@@ -1161,29 +1092,20 @@ function createMarkdownRenderer() {
             >
               {{ serviceStateText }}
             </button>
-            <button type="button" class="codex-round-button" @click="toggleDrawer('settings')">⚙</button>
-            <button
-              type="button"
-              class="codex-round-button codex-round-button--subtle"
-              aria-label="新建对话"
-              title="新建对话"
-              @click="createConversation"
-            >
-              ＋
+            <button type="button" class="codex-round-button" @click="showSettings = true" aria-label="设置">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
           </div>
         </header>
 
         <section ref="messageViewport" class="codex-stage-scroll" @scroll="updateScrollIndicators">
           <div v-if="!hasMessages" class="codex-welcome">
-            <p class="codex-welcome-kicker">Connected to your local Codex service</p>
             <h2>有什么可以帮忙的？</h2>
             <p>让 Codex 帮你读代码、分析问题、制定计划，或者直接推动一个实现方案。</p>
 
             <div class="codex-context-chips codex-context-chips--center">
-              <span class="codex-context-chip">{{ activeWorkingDirectory }}</span>
-              <span class="codex-context-chip">模型 {{ selectedModelLabel }}</span>
-              <span class="codex-context-chip">Sandbox {{ sandboxMode }}</span>
+              <span class="codex-context-chip">目录 {{ activeWorkingDirectory }}</span>
+              <span class="codex-context-chip">{{ selectedModelLabel }}</span>
             </div>
 
             <div class="codex-suggestion-grid">
@@ -1211,8 +1133,8 @@ function createMarkdownRenderer() {
               ]"
             >
               <div class="codex-message-head">
+                <span class="codex-message-avatar">{{ message.role === 'user' ? 'U' : 'C' }}</span>
                 <span class="codex-message-author">{{ message.role === 'user' ? '你' : 'Codex' }}</span>
-                <time>{{ formatTime(message.createdAt) }}</time>
               </div>
 
               <template v-if="message.role === 'user' && editingMessageId === message.id">
@@ -1271,7 +1193,7 @@ function createMarkdownRenderer() {
               <span class="codex-thinking-dot" />
               <span class="codex-thinking-dot" />
             </div>
-            <p>Codex 正在处理这条消息...</p>
+            <p>Codex 正在思考...</p>
           </div>
         </section>
 
@@ -1282,21 +1204,104 @@ function createMarkdownRenderer() {
         </div>
 
         <form class="codex-composer" :class="{ 'is-elevated': !isNearMessageBottom }" @submit.prevent="sendMessage">
-          <button type="button" class="codex-composer-side" @click="createConversation">＋</button>
+          <button type="button" class="codex-composer-side" @click="createConversation" aria-label="新建对话">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
           <textarea
             ref="composerInput"
             v-model="draft"
             class="codex-composer-input"
-            placeholder="问问 Codex：读这个项目、找问题、给方案，或者直接开始实现"
+            placeholder="发消息给 Codex..."
             :disabled="activeConversationPending"
             rows="1"
             @keydown="handleComposerKeydown"
           />
           <button type="submit" class="codex-composer-send" :disabled="activeConversationPending || !draft.trim()">
-            {{ activeConversationPending ? '…' : '↑' }}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
           </button>
         </form>
       </section>
+
+      <!-- Settings Modal -->
+      <Teleport to="body">
+        <div v-if="showSettings" class="codex-modal-overlay" @click="showSettings = false">
+          <div class="codex-modal" @click.stop>
+            <div class="codex-modal-header">
+              <h3>设置</h3>
+              <button type="button" class="codex-modal-close" @click="showSettings = false">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <div class="codex-modal-body">
+              <div class="codex-sidebar-card">
+                <div class="codex-sidebar-row">
+                  <div>
+                    <strong>服务状态</strong>
+                    <p>{{ serviceStateText }}</p>
+                  </div>
+                  <button type="button" class="codex-soft-button" @click="refreshHealth">检查</button>
+                </div>
+                <p class="codex-settings-meta">当前 API: {{ normalizedApiBase }}</p>
+              </div>
+
+              <div class="codex-field-group">
+                <label class="codex-field-label" for="codex-api-base">服务地址</label>
+                <input id="codex-api-base" v-model="apiBase" class="codex-input" placeholder="http://127.0.0.1:3200" />
+              </div>
+
+              <div class="codex-field-group">
+                <label class="codex-field-label" for="codex-working-dir">工作目录</label>
+                <input id="codex-working-dir" v-model="workingDirectory" class="codex-input" placeholder="." />
+              </div>
+
+              <div class="codex-field-group">
+                <label class="codex-field-label" for="codex-model">模型</label>
+                <select id="codex-model" v-model="model" class="codex-select">
+                  <option
+                    v-for="option in availableModelOptions"
+                    :key="option.value || 'default-model'"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </div>
+
+              <div class="codex-field-group">
+                <label class="codex-field-label" for="codex-base-url">Base URL</label>
+                <input id="codex-base-url" v-model="baseUrl" class="codex-input" placeholder="可选覆盖" />
+              </div>
+
+              <div class="codex-field-grid">
+                <div class="codex-field-group">
+                  <label class="codex-field-label" for="codex-sandbox">Sandbox</label>
+                  <select id="codex-sandbox" v-model="sandboxMode" class="codex-select">
+                    <option value="read-only">read-only</option>
+                    <option value="workspace-write">workspace-write</option>
+                    <option value="danger-full-access">danger-full-access</option>
+                  </select>
+                </div>
+
+                <div class="codex-field-group">
+                  <label class="codex-field-label" for="codex-approval">Approval</label>
+                  <select id="codex-approval" v-model="approvalPolicy" class="codex-select">
+                    <option value="never">never</option>
+                    <option value="on-request">on-request</option>
+                    <option value="on-failure">on-failure</option>
+                    <option value="untrusted">untrusted</option>
+                  </select>
+                </div>
+              </div>
+
+              <label class="codex-switch-row">
+                <input v-model="networkAccessEnabled" type="checkbox" />
+                <span>允许网络访问</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </div>
   </main>
 </template>
