@@ -13,6 +13,8 @@ import ItalyTripMapPage from '@/pages/ItalyTripMapPage.vue'
 import ItalyTravelCompanionPage from '@/pages/ItalyTravelCompanionPage.vue'
 import ItalyTravelPage2 from '@/pages/ItalyTravelPage-2.vue'
 import ItalyThreePage from '@/pages/Italy-3.vue'
+import CartierPage from '@/pages/CartierPage.vue'
+
 
 const SITE_NAME = '项目展示'
 const SITE_URL = 'https://jackson-he.github.io'
@@ -32,6 +34,16 @@ const routes = [
       title: '项目展示',
       description: DEFAULT_META.description,
       sharePath: '/',
+    },
+  },
+  {
+    path: '/projects/cartier',
+    name: 'cartier',
+    component: CartierPage,
+    meta: {
+      title: 'cartier',
+      description: 'cartier。',
+      sharePath: '/projects/cartier/',
     },
   },
   {
