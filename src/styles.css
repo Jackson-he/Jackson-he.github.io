@@ -1470,7 +1470,7 @@ select {
 
 @media (max-width: 980px) {
   .codex-app {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     height: 100dvh;
     min-height: 100dvh;
   }
