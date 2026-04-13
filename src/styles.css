@@ -946,6 +946,8 @@ select {
   color: #ececec;
   line-height: 1.7;
   padding-left: 38px;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .codex-message-usage {
@@ -1808,7 +1810,7 @@ select {
 
 @media (max-width: 720px) {
   .page {
-    padding-inline: 14px;
+    /* padding-inline: 14px; */
   }
 
   .hero,
@@ -1819,5 +1821,429 @@ select {
 
   .table {
     min-width: 640px;
+  }
+}
+
+/* ==========================================
+   Light Theme Overrides for Codex Page
+   ========================================== */
+
+.codex-app.is-light {
+  color: #1a1a1a;
+}
+
+/* Page background */
+.page--codex.codex-page {
+  background: #f9f9f9;
+}
+
+.codex-app.is-light .page--codex {
+  background: #f9f9f9;
+}
+
+/* Drawer / sidebar */
+.codex-app.is-light .codex-drawer {
+  background: #f0f0f0;
+}
+
+.codex-app.is-light .codex-drawer-kicker {
+  color: #666;
+}
+
+.codex-app.is-light .codex-drawer-header h2 {
+  color: #1a1a1a;
+}
+
+/* New chat button */
+.codex-app.is-light .codex-new-chat-btn {
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-new-chat-btn:hover {
+  background: #e5e5e5;
+}
+
+/* History toolbar */
+.codex-app.is-light .codex-history-summary strong {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-history-summary span {
+  color: #999;
+}
+
+/* History cards */
+.codex-app.is-light .codex-history-card {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-history-card:hover,
+.codex-app.is-light .codex-history-card.is-active {
+  background: #e5e5e5;
+}
+
+.codex-app.is-light .codex-history-delete {
+  color: #999;
+}
+
+.codex-app.is-light .codex-history-delete:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #ef4444;
+}
+
+.codex-app.is-light .codex-history-pending {
+  color: #6366f1;
+}
+
+/* Empty card */
+.codex-app.is-light .codex-empty-card {
+  background: #e8e8e8;
+}
+
+.codex-app.is-light .codex-empty-card--sidebar p {
+  color: #888;
+}
+
+/* Sidebar card / settings */
+.codex-app.is-light .codex-sidebar-card {
+  background: #e8e8e8;
+}
+
+.codex-app.is-light .codex-sidebar-row strong {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-sidebar-row p,
+.codex-app.is-light .codex-settings-meta {
+  color: #888;
+}
+
+.codex-app.is-light .codex-field-label {
+  color: #666;
+}
+
+.codex-app.is-light .codex-input,
+.codex-app.is-light .codex-select {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: #e8e8e8;
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-input:focus,
+.codex-app.is-light .codex-select:focus {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.codex-app.is-light .codex-switch-row {
+  color: #666;
+}
+
+.codex-app.is-light .codex-switch-row input {
+  accent-color: #6366f1;
+}
+
+/* Main stage */
+.codex-app.is-light .codex-stage {
+  background: #ffffff;
+}
+
+/* Topbar */
+.codex-app.is-light .codex-topbar {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.codex-app.is-light .codex-topbar.is-elevated {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+/* Round / pill buttons */
+.codex-app.is-light .codex-round-button {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-round-button:hover {
+  background: #e8e8e8;
+}
+
+.codex-app.is-light .codex-pill-button {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-pill-button:hover {
+  background: #e8e8e8;
+}
+
+.codex-app.is-light .codex-pill-button--status {
+  color: #888;
+}
+
+.codex-app.is-light .codex-pill-mark {
+  color: #6366f1;
+}
+
+/* Context chips */
+.codex-app.is-light .codex-context-chip {
+  background: #e8e8e8;
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #888;
+}
+
+/* Welcome */
+.codex-app.is-light .codex-welcome h2 {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-welcome p {
+  color: #888;
+}
+
+.codex-app.is-light .codex-welcome-kicker {
+  color: #999;
+}
+
+/* Suggestion chips */
+.codex-app.is-light .codex-suggestion-chip {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: #f0f0f0;
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-suggestion-chip:hover {
+  background: #e5e5e5;
+}
+
+.codex-app.is-light .codex-suggestion-icon {
+  background: #e5e5e5;
+  color: #6366f1;
+}
+
+/* Messages */
+.codex-app.is-light .codex-message-author {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-message-content {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-message-usage {
+  color: #aaa;
+}
+
+/* Message edit */
+.codex-app.is-light .codex-message-edit-button,
+.codex-app.is-light .codex-message-inline-button {
+  background: #e8e8e8;
+  color: #666;
+}
+
+.codex-app.is-light .codex-message-edit-button:hover,
+.codex-app.is-light .codex-message-inline-button:hover {
+  background: #ddd;
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-message-edit-input {
+  border-color: rgba(0, 0, 0, 0.15);
+  background: #f0f0f0;
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-message-edit-input:focus {
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.codex-app.is-light .codex-message-edit-footer span {
+  color: #999;
+}
+
+.codex-app.is-light .codex-message-inline-button--primary {
+  background: #6366f1;
+  color: #fff;
+}
+
+.codex-app.is-light .codex-message-inline-button--primary:hover {
+  background: #4f46e5;
+}
+
+/* Markdown */
+.codex-app.is-light .codex-markdown h1,
+.codex-app.is-light .codex-markdown h2,
+.codex-app.is-light .codex-markdown h3,
+.codex-app.is-light .codex-markdown h4 {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-markdown a {
+  color: #6366f1;
+}
+
+.codex-app.is-light .codex-markdown blockquote {
+  border-left-color: #6366f1;
+  background: rgba(99, 102, 241, 0.06);
+  color: #555;
+}
+
+.codex-app.is-light .codex-markdown hr {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+
+.codex-app.is-light .codex-markdown ul,
+.codex-app.is-light .codex-markdown ol {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-markdown table {
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.codex-app.is-light .codex-markdown th,
+.codex-app.is-light .codex-markdown td {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+.codex-app.is-light .codex-markdown th {
+  background: rgba(0, 0, 0, 0.03);
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-markdown :not(pre) > code {
+  background: rgba(0, 0, 0, 0.06);
+  color: #b91c1c;
+}
+
+/* Code blocks */
+.codex-app.is-light .codex-code-block {
+  background: #f5f5f5;
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-code-block-head {
+  background: rgba(0, 0, 0, 0.03);
+  color: #888;
+}
+
+.codex-app.is-light .codex-code-copy {
+  background: rgba(0, 0, 0, 0.06);
+  color: #888;
+}
+
+.codex-app.is-light .codex-code-copy:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* Thinking indicator */
+.codex-app.is-light .codex-thinking-row {
+  background: #f0f0f0;
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+.codex-app.is-light .codex-thinking-row p {
+  color: #888;
+}
+
+.codex-app.is-light .codex-thinking-dot {
+  background: #6366f1;
+}
+
+/* Feedback row */
+.codex-app.is-light .codex-feedback-row {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.95) 28%, #ffffff);
+}
+
+.codex-app.is-light .codex-feedback-text {
+  color: #888;
+}
+
+.codex-app.is-light .codex-feedback-text--success {
+  color: #16a34a;
+}
+
+.codex-app.is-light .codex-feedback-text--error {
+  color: #dc2626;
+}
+
+/* Composer */
+.codex-app.is-light .codex-composer {
+  background: #f0f0f0;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.codex-app.is-light .codex-composer.is-elevated {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: #e8e8e8;
+}
+
+.codex-app.is-light .codex-composer-input {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-composer-input::placeholder {
+  color: #aaa;
+}
+
+.codex-app.is-light .codex-composer-side {
+  color: #888;
+}
+
+.codex-app.is-light .codex-composer-side:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.codex-app.is-light .codex-composer-send {
+  background: #1a1a1a;
+  color: #ffffff;
+}
+
+/* Soft button */
+.codex-app.is-light .codex-soft-button {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: #e8e8e8;
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-soft-button:hover {
+  background: #ddd;
+}
+
+/* Modal */
+.codex-app.is-light .codex-modal-overlay {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.codex-app.is-light .codex-modal {
+  background: #f0f0f0;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.codex-app.is-light .codex-modal-header {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+.codex-app.is-light .codex-modal-header h3 {
+  color: #1a1a1a;
+}
+
+.codex-app.is-light .codex-modal-close {
+  color: #888;
+}
+
+.codex-app.is-light .codex-modal-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1a1a1a;
+}
+
+/* Overlay */
+.codex-app.is-light .codex-overlay {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* Mobile responsive drawer border */
+@media (max-width: 980px) {
+  .codex-app.is-light .codex-drawer {
+    border-right-color: rgba(0, 0, 0, 0.06);
   }
 }

@@ -72,6 +72,7 @@ const editingMessageContent = ref('')
 const pendingConversationIds = ref([])
 const streamingAssistantIds = ref({})
 const showSettings = ref(false)
+const isDarkMode = ref(loadStorage('codex-dark-mode', true))
 
 const normalizedApiBase = computed(() => apiBase.value.replace(/\/+$/, ''))
 const activeMessages = computed(() => activeConversation.value?.messages || [])
@@ -131,6 +132,10 @@ watch(
     saveStorage(STORAGE_KEYS.activeConversationId, activeConversationId.value)
   },
 )
+
+watch(isDarkMode, (val) => {
+  saveStorage('codex-dark-mode', val)
+})
 
 watch(
   () => activeMessages.value.length,
@@ -1005,7 +1010,7 @@ function createMarkdownRenderer() {
 
 <template>
   <main class="page page--codex codex-page">
-    <div class="codex-app">
+    <div class="codex-app" :class="{ 'is-light': !isDarkMode }">
       <div v-if="shouldShowDrawerOverlay" class="codex-overlay" @click="closeDrawer" />
 
       <aside class="codex-drawer" :class="{ 'is-open': shouldShowDrawer, 'is-desktop': isDesktop, 'is-collapsed': isSidebarCollapsed }">
@@ -1092,6 +1097,10 @@ function createMarkdownRenderer() {
             >
               {{ serviceStateText }}
             </button>
+            <button type="button" class="codex-round-button" @click="isDarkMode = !isDarkMode" :aria-label="isDarkMode ? '切换为浅色模式' : '切换为深色模式'">
+              <svg v-if="isDarkMode" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
             <button type="button" class="codex-round-button" @click="showSettings = true" aria-label="设置">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
@@ -1100,15 +1109,15 @@ function createMarkdownRenderer() {
 
         <section ref="messageViewport" class="codex-stage-scroll" @scroll="updateScrollIndicators">
           <div v-if="!hasMessages" class="codex-welcome">
-            <h2>有什么可以帮忙的？</h2>
-            <p>让 Codex 帮你读代码、分析问题、制定计划，或者直接推动一个实现方案。</p>
+            <h2>What can I help with?</h2>
+            <!-- <p>让 Codex 帮你读代码、分析问题、制定计划，或者直接推动一个实现方案。</p> -->
 
             <div class="codex-context-chips codex-context-chips--center">
-              <span class="codex-context-chip">目录 {{ activeWorkingDirectory }}</span>
+              <!-- <span class="codex-context-chip">目录 {{ activeWorkingDirectory }}</span> -->
               <span class="codex-context-chip">{{ selectedModelLabel }}</span>
             </div>
 
-            <div class="codex-suggestion-grid">
+            <!-- <div class="codex-suggestion-grid">
               <button
                 v-for="item in SUGGESTION_PROMPTS"
                 :key="item.label"
@@ -1119,7 +1128,7 @@ function createMarkdownRenderer() {
                 <span class="codex-suggestion-icon">{{ item.icon }}</span>
                 <span>{{ item.label }}</span>
               </button>
-            </div>
+            </div> -->
           </div>
 
           <div v-else class="codex-message-stack">
