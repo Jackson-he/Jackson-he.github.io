@@ -4,6 +4,7 @@ import MarkdownIt from 'markdown-it'
 
 const STORAGE_KEYS = {
   apiBase: 'codex-chat-api-base',
+  apiKey: 'codex-chat-api-key',
   workingDirectory: 'codex-chat-working-directory',
   model: 'codex-chat-model',
   baseUrl: 'codex-chat-base-url',
@@ -41,6 +42,7 @@ const STREAMING_ASSISTANT_FALLBACK_PREFIX = 'stream-assistant'
 const markdown = createMarkdownRenderer()
 
 const apiBase = ref(resolveInitialApiBase())
+const apiKey = ref(loadStorage(STORAGE_KEYS.apiKey, ''))
 const workingDirectory = ref(loadStorage(STORAGE_KEYS.workingDirectory, '.'))
 const model = ref(loadStorage(STORAGE_KEYS.model, ''))
 const baseUrl = ref(loadStorage(STORAGE_KEYS.baseUrl, ''))
@@ -120,9 +122,10 @@ const availableModelOptions = computed(() => {
 })
 
 watch(
-  [apiBase, workingDirectory, model, baseUrl, sandboxMode, approvalPolicy, networkAccessEnabled, activeConversationId],
+  [apiBase, apiKey, workingDirectory, model, baseUrl, sandboxMode, approvalPolicy, networkAccessEnabled, activeConversationId],
   () => {
     saveStorage(STORAGE_KEYS.apiBase, apiBase.value)
+    saveStorage(STORAGE_KEYS.apiKey, apiKey.value)
     saveStorage(STORAGE_KEYS.workingDirectory, workingDirectory.value)
     saveStorage(STORAGE_KEYS.model, model.value)
     saveStorage(STORAGE_KEYS.baseUrl, baseUrl.value)
@@ -349,6 +352,7 @@ function handleEditComposerKeydown(event) {
 
 function buildConversationPayload() {
   return {
+    apiKey: apiKey.value.trim(),
     workingDirectory: workingDirectory.value.trim() || '.',
     model: model.value.trim(),
     baseUrl: baseUrl.value.trim(),
@@ -503,10 +507,9 @@ async function submitMessageContent(content) {
 async function requestStreamingConversationReply(conversationId, content) {
   const response = await fetch(`${normalizedApiBase.value}/api/codex/conversations/${conversationId}/messages/stream`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+    headers: buildRequestHeaders({
       Accept: 'text/event-stream',
-    },
+    }),
     body: JSON.stringify({
       content,
       ...buildConversationPayload(),
@@ -576,9 +579,7 @@ async function requestStreamingConversationReply(conversationId, content) {
 async function requestConversationReply(conversationId, content) {
   const response = await fetch(`${normalizedApiBase.value}/api/codex/conversations/${conversationId}/messages`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: buildRequestHeaders(),
     body: JSON.stringify({
       content,
       ...buildConversationPayload(),
@@ -877,10 +878,7 @@ function compactText(value) {
 
 async function apiCall(path, options = {}) {
   const response = await fetch(`${normalizedApiBase.value}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
+    headers: buildRequestHeaders(options.headers || {}),
     ...options,
   })
 
@@ -908,6 +906,20 @@ function createApiError(response, data = {}) {
   }
 
   return new Error(`Request failed with status ${response.status}`)
+}
+
+function buildRequestHeaders(extraHeaders = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...extraHeaders,
+  }
+
+  const normalizedApiKey = compactText(apiKey.value)
+  if (normalizedApiKey) {
+    headers['X-Codex-Api-Key'] = normalizedApiKey
+  }
+
+  return headers
 }
 
 function resolveInitialApiBase() {
@@ -1077,7 +1089,7 @@ function createMarkdownRenderer() {
       <section class="codex-stage">
         <header class="codex-topbar" :class="{ 'is-elevated': hasScrolledMessages }">
           <div class="codex-topbar-group">
-            <button type="button" class="codex-round-button" @click="toggleDrawer('history')" aria-label="打开历史对话">
+            <button v-if="!isDesktop" type="button" class="codex-round-button" @click="toggleDrawer('history')" aria-label="打开历史对话">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
             <button type="button" class="codex-pill-button codex-pill-button--brand" @click="openDrawer('history')">
@@ -1259,9 +1271,22 @@ function createMarkdownRenderer() {
                 <input id="codex-api-base" v-model="apiBase" class="codex-input" placeholder="http://127.0.0.1:3200" />
               </div>
 
-              <div class="codex-field-group">
+              <!-- <div class="codex-field-group">
                 <label class="codex-field-label" for="codex-working-dir">工作目录</label>
                 <input id="codex-working-dir" v-model="workingDirectory" class="codex-input" placeholder="." />
+              </div> -->
+
+              <div class="codex-field-group">
+                <label class="codex-field-label" for="codex-api-key">CODEX_API_KEY</label>
+                <input
+                  id="codex-api-key"
+                  v-model="apiKey"
+                  type="password"
+                  class="codex-input"
+                  placeholder="可选覆盖服务端环境变量"
+                  autocomplete="new-password"
+                  spellcheck="false"
+                />
               </div>
 
               <div class="codex-field-group">
@@ -1303,10 +1328,10 @@ function createMarkdownRenderer() {
                 </div>
               </div>
 
-              <label class="codex-switch-row">
+              <!-- <label class="codex-switch-row">
                 <input v-model="networkAccessEnabled" type="checkbox" />
                 <span>允许网络访问</span>
-              </label>
+              </label> -->
             </div>
           </div>
         </div>
