@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watchEffect } from 'vue'
 
 const apiUrl = ref('http://localhost:3001')
+const activeTab = ref('matches')
 const historyTypeFilter = ref('')
 
 const matchesState = reactive({
@@ -85,11 +86,11 @@ function accuracyText(value) {
 }
 
 function emptyMessageForPrediction() {
-  return predictionsState.view === 'compare' ? '暂无对比数据' : '点击“查看今日预测”查看预测结果'
+  return predictionsState.view === 'compare' ? '暂无对比数据' : '点击"查看今日预测"查看预测结果'
 }
 
 function emptyMessageForRecommendation() {
-  return recommendationsState.view === 'compare' ? '暂无推荐对比数据' : '点击“查看推荐”查看推荐结果'
+  return recommendationsState.view === 'compare' ? '暂无推荐对比数据' : '点击"查看推荐"查看推荐结果'
 }
 
 function streakText(streak) {
@@ -355,403 +356,1232 @@ async function loadHistoryRecommendations() {
 </script>
 
 <template>
-  <main class="page page--dark">
-    <div class="page-container page-grid">
+  <main class="sp-page">
+    <div class="sp-container">
 
-      <section class="hero">
-        <p class="eyebrow">Sport Prediction</p>
-        <h1 class="hero-title">⚽ 赛事预测查询系统</h1>
-      </section>
+      <!-- Stadium Header -->
+      <header class="sp-header">
+        <div class="sp-header__badge">SPORT PREDICTION</div>
+        <div></div>
+        <!-- <h1 class="sp-header__title">赛事预测系统</h1> -->
+        <div class="sp-header__config">
+          <label class="sp-config-label" for="apiUrl">API</label>
+          <input id="apiUrl" v-model="apiUrl" class="sp-config-input" type="text" placeholder="http://localhost:3001">
+        </div>
+      </header>
 
-      <section class="panel page-grid">
-        <div class="field-group">
-          <label class="field-label" for="apiUrl">API 服务器地址</label>
-          <input id="apiUrl" v-model="apiUrl" class="input" type="text" placeholder="http://localhost:3001">
+      <!-- Tab Navigation -->
+      <nav class="sp-tabs">
+        <button class="sp-tab" :class="{ 'is-active': activeTab === 'matches' }" @click="activeTab = 'matches'">比赛</button>
+        <button class="sp-tab" :class="{ 'is-active': activeTab === 'predictions' }" @click="activeTab = 'predictions'">预测</button>
+        <button class="sp-tab" :class="{ 'is-active': activeTab === 'recommendations' }" @click="activeTab = 'recommendations'">推荐</button>
+        <button class="sp-tab" :class="{ 'is-active': activeTab === 'history' }" @click="activeTab = 'history'">历史</button>
+      </nav>
+
+      <!-- ========== MATCHES TAB ========== -->
+      <section v-if="activeTab === 'matches'" class="sp-section">
+        <div class="sp-section-header">
+          <div>
+            <h2 class="sp-section-title">今日比赛</h2>
+            <p class="sp-section-sub">获取今日赛程并进行预测</p>
+          </div>
+          <div class="sp-actions">
+            <button class="sp-btn sp-btn--primary" :disabled="matchesState.loading" @click="loadTodayMatches">获取比赛</button>
+            <button class="sp-btn sp-btn--gold" :disabled="predictionsState.loading" @click="predictToday">开始预测</button>
+          </div>
         </div>
 
-        <div class="button-row">
-          <button class="btn btn--primary" @click="loadTodayMatches">📅 获取今日比赛</button>
-          <button class="btn btn--success" @click="predictToday">🔮 预测今日比赛</button>
-          <button class="btn btn--info" @click="loadTodayPredictions">📊 查看今日预测</button>
-          <button class="btn btn--warning" @click="generateRecommendations">⭐ 生成推荐</button>
-          <button class="btn btn--info" @click="loadRecommendations">💡 查看推荐</button>
-          <button class="btn btn--primary" @click="compareResults">📈 对比预测</button>
-          <button class="btn btn--warning" @click="compareRecommendations">🧮 对比推荐</button>
-          <button class="btn btn--info" @click="loadHistoryRecommendations">📜 历史推荐</button>
+        <div v-if="matchesState.loading" class="sp-empty">
+          <div class="sp-spinner"></div>
+          <p>正在加载比赛列表...</p>
+        </div>
+        <div v-else-if="matchesState.error" class="sp-error">{{ matchesState.error }}</div>
+        <div v-else-if="!matchesState.items.length" class="sp-empty">
+          <div class="sp-empty__icon">&#9917;</div>
+          <p>{{ matchesState.loaded ? '今日暂无比赛' : '点击"获取比赛"查看比赛列表' }}</p>
+        </div>
+        <div v-else class="sp-match-grid">
+          <article v-for="match in matchesState.items" :key="match.matchId || `${match.homeTeam}-${match.awayTeam}`" class="sp-match-card">
+            <div class="sp-match-card__league">{{ match.league || '未知联赛' }}</div>
+            <div class="sp-match-card__body">
+              <div class="sp-match-card__team sp-match-card__team--home">{{ match.homeTeam }}</div>
+              <div class="sp-match-card__vs">VS</div>
+              <div class="sp-match-card__team sp-match-card__team--away">{{ match.awayTeam }}</div>
+            </div>
+            <div class="sp-match-card__footer">
+              <span>{{ match.matchTime || '时间待定' }}</span>
+              <span class="sp-match-card__id">ID: {{ match.matchId }}</span>
+            </div>
+          </article>
         </div>
       </section>
 
-      <section class="page-grid page-grid--two">
-        <section class="panel">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-title">📅 今日比赛</h2>
-              <p class="panel-subtitle">读取 `/api/predictions/matches/today`。</p>
+      <!-- ========== PREDICTIONS TAB ========== -->
+      <section v-if="activeTab === 'predictions'" class="sp-section">
+        <div class="sp-section-header">
+          <div>
+            <h2 class="sp-section-title">预测结果</h2>
+            <p class="sp-section-sub">查看今日预测和按日期对比</p>
+          </div>
+          <div class="sp-actions">
+            <button class="sp-btn sp-btn--primary" :disabled="predictionsState.loading" @click="loadTodayPredictions">今日预测</button>
+            <button class="sp-btn sp-btn--outline" :disabled="predictionsState.loading" @click="compareResults">对比预测</button>
+          </div>
+        </div>
+
+        <div v-if="predictionsState.loading" class="sp-empty">
+          <div class="sp-spinner"></div>
+          <p>正在加载预测数据...</p>
+        </div>
+        <div v-else-if="predictionsState.error" class="sp-error">{{ predictionsState.error }}</div>
+
+        <!-- Compare View -->
+        <template v-else-if="predictionsState.view === 'compare' && predictionsState.comparisons.length">
+          <div class="sp-date-badge" v-if="predictionsState.date">{{ predictionsState.date }}</div>
+          <div class="sp-stats-bar">
+            <div class="sp-stat-box">
+              <div class="sp-stat-box__label">总比赛数</div>
+              <div class="sp-stat-box__value">{{ predictionsState.stats.totalMatches || 0 }}</div>
+            </div>
+            <div class="sp-stat-box">
+              <div class="sp-stat-box__label">有结果</div>
+              <div class="sp-stat-box__value">{{ predictionsState.stats.matchesWithResults || 0 }}</div>
+            </div>
+            <div class="sp-stat-box">
+              <div class="sp-stat-box__label">胜负正确</div>
+              <div class="sp-stat-box__value">{{ predictionsState.stats.fullTimeResultCorrect || 0 }}</div>
+            </div>
+            <div class="sp-stat-box sp-stat-box--highlight">
+              <div class="sp-stat-box__label">准确率</div>
+              <div class="sp-stat-box__value">{{ predictionsState.stats.averageAccuracy || 0 }}%</div>
             </div>
           </div>
 
-          <div v-if="matchesState.loading" class="empty-state">
-            <div class="empty-state-icon">⏳</div>
-            <p>正在加载比赛列表...</p>
-          </div>
-          <div v-else-if="matchesState.error" class="message-box message-box--error">{{ matchesState.error }}</div>
-          <div v-else-if="!matchesState.items.length" class="empty-state">
-            <div class="empty-state-icon">⚽</div>
-            <p>{{ matchesState.loaded ? '今日暂无比赛' : '点击“获取今日比赛”查看比赛列表' }}</p>
-          </div>
-          <div v-else class="item-list">
-            <article v-for="match in matchesState.items" :key="match.matchId || `${match.homeTeam}-${match.awayTeam}`" class="item-card">
-              <div class="panel-header">
+          <div class="sp-card-grid">
+            <article v-for="comp in predictionsState.comparisons" :key="comp.matchId || `${comp.homeTeam}-${comp.awayTeam}`" class="sp-pred-card">
+              <div class="sp-pred-card__header">
                 <div>
-                  <h3 class="panel-title">{{ match.homeTeam }} vs {{ match.awayTeam }}</h3>
-                  <p class="panel-subtitle">{{ match.league || '未知联赛' }}</p>
+                  <div class="sp-pred-card__league">{{ comp.league || '未知联赛' }}</div>
+                  <h3 class="sp-pred-card__teams">{{ comp.homeTeam }} vs {{ comp.awayTeam }}</h3>
                 </div>
-                <span class="status-pill status-pill--muted">{{ match.matchTime || '时间待定' }}</span>
+                <span class="sp-badge" :class="confidenceClass(comp.comparison?.accuracy)">
+                  {{ comp.hasOfficialResult && comp.comparison ? accuracyText(comp.comparison.accuracy) : '暂无结果' }}
+                </span>
               </div>
-              <p class="muted-text">比赛 ID：{{ match.matchId }}</p>
+              <div v-if="comp.hasOfficialResult && comp.comparison" class="sp-compare-grid">
+                <div class="sp-compare-col">
+                  <div class="sp-compare-col__title">预测</div>
+                  <div class="sp-kv"><span class="sp-kv__k">胜负</span><span class="sp-kv__v">{{ comp.prediction?.fullTimeResult || '未知' }}</span></div>
+                  <div class="sp-kv"><span class="sp-kv__k">比分</span><span class="sp-kv__v">{{ comp.prediction?.score || '未知' }}</span></div>
+                  <div class="sp-kv"><span class="sp-kv__k">进球</span><span class="sp-kv__v">{{ comp.prediction?.goalRange || '未知' }}</span></div>
+                  <div class="sp-kv"><span class="sp-kv__k">半全场</span><span class="sp-kv__v">{{ comp.prediction?.halfFullTime || '未知' }}</span></div>
+                </div>
+                <div class="sp-compare-col sp-compare-col--actual">
+                  <div class="sp-compare-col__title">官方</div>
+                  <div class="sp-kv"><span class="sp-kv__k">胜负</span><span class="sp-kv__v">{{ comp.officialResult?.fullTimeResult || '未知' }}</span></div>
+                  <div class="sp-kv"><span class="sp-kv__k">比分</span><span class="sp-kv__v">{{ comp.officialResult?.score || '未知' }}</span></div>
+                  <div class="sp-kv"><span class="sp-kv__k">进球</span><span class="sp-kv__v">{{ comp.officialResult?.goalRange || comp.officialResult?.totalGoals || '未知' }}</span></div>
+                  <div class="sp-kv"><span class="sp-kv__k">半全场</span><span class="sp-kv__v">{{ comp.officialResult?.halfFullTime || '未知' }}</span></div>
+                </div>
+              </div>
+              <div v-else class="sp-no-result">暂无官方结果</div>
             </article>
           </div>
-        </section>
+        </template>
 
-        <section class="panel">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-title">🔮 预测结果</h2>
-              <p class="panel-subtitle">支持查看今日预测和按日期对比结果。</p>
-            </div>
-            <span v-if="predictionsState.view === 'compare' && predictionsState.date" class="status-pill status-pill--muted">
-              {{ predictionsState.date }}
-            </span>
+        <!-- Today Predictions -->
+        <template v-else-if="predictionsState.items.length">
+          <div class="sp-card-grid">
+            <article v-for="pred in predictionsState.items" :key="pred.matchId || `${pred.homeTeam}-${pred.awayTeam}`" class="sp-pred-card">
+              <div class="sp-pred-card__header">
+                <div>
+                  <div class="sp-pred-card__league">{{ pred.league || '未知联赛' }}</div>
+                  <h3 class="sp-pred-card__teams">{{ pred.homeTeam }} vs {{ pred.awayTeam }}</h3>
+                </div>
+                <span class="sp-badge" :class="confidenceClass(pred.prediction?.prediction?.confidence)">
+                  {{ pred.prediction?.prediction?.confidence || 0 }}%
+                </span>
+              </div>
+              <div class="sp-progress">
+                <div class="sp-progress__fill" :style="{ width: (pred.prediction?.prediction?.confidence || 0) + '%' }"></div>
+              </div>
+              <div class="sp-detail-chips">
+                <div class="sp-chip">
+                  <div class="sp-chip__label">胜负</div>
+                  <div class="sp-chip__value">{{ pred.prediction?.prediction?.fullTimeResult || '未知' }}</div>
+                </div>
+                <div class="sp-chip">
+                  <div class="sp-chip__label">比分</div>
+                  <div class="sp-chip__value">{{ pred.prediction?.prediction?.score || '未知' }}</div>
+                </div>
+                <div class="sp-chip">
+                  <div class="sp-chip__label">进球数</div>
+                  <div class="sp-chip__value">{{ pred.prediction?.prediction?.goalRange || '未知' }}</div>
+                </div>
+                <div class="sp-chip">
+                  <div class="sp-chip__label">半全场</div>
+                  <div class="sp-chip__value">{{ pred.prediction?.prediction?.halfFullTime || '未知' }}</div>
+                </div>
+              </div>
+            </article>
           </div>
+        </template>
 
-          <div v-if="predictionsState.loading" class="empty-state">
-            <div class="empty-state-icon">⏳</div>
-            <p>正在加载预测数据...</p>
-          </div>
-          <div v-else-if="predictionsState.error" class="message-box message-box--error">{{ predictionsState.error }}</div>
-          <template v-else-if="predictionsState.view === 'compare' && predictionsState.comparisons.length">
-            <div class="stats-grid" style="margin-bottom: 18px;">
-              <div class="stat-card">
-                <div class="muted-label">总比赛数</div>
-                <div class="stat-card-value">{{ predictionsState.stats.totalMatches || 0 }}</div>
-              </div>
-              <div class="stat-card">
-                <div class="muted-label">有结果比赛</div>
-                <div class="stat-card-value">{{ predictionsState.stats.matchesWithResults || 0 }}</div>
-              </div>
-              <div class="stat-card">
-                <div class="muted-label">胜负正确</div>
-                <div class="stat-card-value">{{ predictionsState.stats.fullTimeResultCorrect || 0 }}</div>
-              </div>
-              <div class="stat-card">
-                <div class="muted-label">平均准确率</div>
-                <div class="stat-card-value">{{ predictionsState.stats.averageAccuracy || 0 }}%</div>
-              </div>
-            </div>
-
-            <div class="item-list">
-              <article v-for="comp in predictionsState.comparisons" :key="comp.matchId || `${comp.homeTeam}-${comp.awayTeam}`" class="item-card">
-                <div class="panel-header">
-                  <div>
-                    <h3 class="panel-title">{{ comp.homeTeam }} vs {{ comp.awayTeam }}</h3>
-                    <p class="panel-subtitle">{{ comp.league || '未知联赛' }}</p>
-                  </div>
-                  <span class="status-pill" :class="confidenceClass(comp.comparison?.accuracy)">
-                    {{ comp.hasOfficialResult && comp.comparison ? accuracyText(comp.comparison.accuracy) : '暂无结果' }}
-                  </span>
-                </div>
-
-                <div v-if="comp.hasOfficialResult && comp.comparison" class="detail-grid">
-                  <div class="surface-block">
-                    <div class="section-heading">预测结果</div>
-                    <p class="muted-text">胜负：{{ comp.prediction?.fullTimeResult || '未知' }}</p>
-                    <p class="muted-text">比分：{{ comp.prediction?.score || '未知' }}</p>
-                    <p class="muted-text">进球数：{{ comp.prediction?.goalRange || '未知' }}</p>
-                    <p class="muted-text">半全场：{{ comp.prediction?.halfFullTime || '未知' }}</p>
-                  </div>
-                  <div class="surface-block">
-                    <div class="section-heading">官方结果</div>
-                    <p class="muted-text">胜负：{{ comp.officialResult?.fullTimeResult || '未知' }}</p>
-                    <p class="muted-text">比分：{{ comp.officialResult?.score || '未知' }}</p>
-                    <p class="muted-text">进球数：{{ comp.officialResult?.goalRange || comp.officialResult?.totalGoals || '未知' }}</p>
-                    <p class="muted-text">半全场：{{ comp.officialResult?.halfFullTime || '未知' }}</p>
-                  </div>
-                </div>
-                <div v-else class="surface-block">⚠️ 该比赛暂无官方结果。</div>
-              </article>
-            </div>
-          </template>
-          <template v-else-if="predictionsState.items.length">
-            <div class="item-list">
-              <article v-for="pred in predictionsState.items" :key="pred.matchId || `${pred.homeTeam}-${pred.awayTeam}`" class="item-card">
-                <div class="panel-header">
-                  <div>
-                    <h3 class="panel-title">{{ pred.homeTeam }} vs {{ pred.awayTeam }}</h3>
-                    <p class="panel-subtitle">{{ pred.league || '未知联赛' }}</p>
-                  </div>
-                  <span class="status-pill" :class="confidenceClass(pred.prediction?.prediction?.confidence)">
-                    {{ pred.prediction?.prediction?.confidence || 0 }}%
-                  </span>
-                </div>
-
-                <div class="detail-grid">
-                  <div class="surface-block">
-                    <div class="muted-label">预测结果</div>
-                    <div>{{ pred.prediction?.prediction?.fullTimeResult || '未知' }}</div>
-                  </div>
-                  <div class="surface-block">
-                    <div class="muted-label">预测比分</div>
-                    <div>{{ pred.prediction?.prediction?.score || '未知' }}</div>
-                  </div>
-                  <div class="surface-block">
-                    <div class="muted-label">总进球数</div>
-                    <div>{{ pred.prediction?.prediction?.goalRange || '未知' }}</div>
-                  </div>
-                  <div class="surface-block">
-                    <div class="muted-label">半全场</div>
-                    <div>{{ pred.prediction?.prediction?.halfFullTime || '未知' }}</div>
-                  </div>
-                </div>
-              </article>
-            </div>
-          </template>
-          <div v-else class="empty-state">
-            <div class="empty-state-icon">📊</div>
-            <p>{{ emptyMessageForPrediction() }}</p>
-          </div>
-        </section>
+        <div v-else class="sp-empty">
+          <div class="sp-empty__icon">&#128202;</div>
+          <p>{{ emptyMessageForPrediction() }}</p>
+        </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-header">
+      <!-- ========== RECOMMENDATIONS TAB ========== -->
+      <section v-if="activeTab === 'recommendations'" class="sp-section">
+        <div class="sp-section-header">
           <div>
-            <h2 class="panel-title">💡 推荐结果</h2>
-            <p class="panel-subtitle">支持查看推荐本身和按日期对比推荐命中情况。</p>
+            <h2 class="sp-section-title">推荐结果</h2>
+            <p class="sp-section-sub">查看推荐和对比推荐命中情况</p>
           </div>
-          <span v-if="recommendationsState.view === 'compare' && recommendationsState.date" class="status-pill status-pill--muted">
-            {{ recommendationsState.date }}
-          </span>
+          <div class="sp-actions">
+            <button class="sp-btn sp-btn--gold" :disabled="recommendationsState.loading" @click="generateRecommendations">生成推荐</button>
+            <button class="sp-btn sp-btn--primary" :disabled="recommendationsState.loading" @click="loadRecommendations">查看推荐</button>
+            <button class="sp-btn sp-btn--outline" :disabled="recommendationsState.loading" @click="compareRecommendations">对比推荐</button>
+          </div>
         </div>
 
-        <div v-if="recommendationsState.loading" class="empty-state">
-          <div class="empty-state-icon">⏳</div>
+        <div v-if="recommendationsState.loading" class="sp-empty">
+          <div class="sp-spinner"></div>
           <p>正在加载推荐数据...</p>
         </div>
-        <div v-else-if="recommendationsState.error" class="message-box message-box--error">{{ recommendationsState.error }}</div>
+        <div v-else-if="recommendationsState.error" class="sp-error">{{ recommendationsState.error }}</div>
+
+        <!-- Compare Recommendations -->
         <template v-else-if="recommendationsState.view === 'compare' && recommendationComparisonGroups.length">
-          <div class="stats-grid" style="margin-bottom: 18px;">
-            <div class="stat-card">
-              <div class="muted-label">推荐比赛数</div>
-              <div class="stat-card-value">{{ recommendationsState.stats.totalRecommendedMatches || 0 }}</div>
+          <div class="sp-date-badge" v-if="recommendationsState.date">{{ recommendationsState.date }}</div>
+          <div class="sp-stats-bar">
+            <div class="sp-stat-box">
+              <div class="sp-stat-box__label">推荐数</div>
+              <div class="sp-stat-box__value">{{ recommendationsState.stats.totalRecommendedMatches || 0 }}</div>
             </div>
-            <div class="stat-card">
-              <div class="muted-label">有结果比赛</div>
-              <div class="stat-card-value">{{ recommendationsState.stats.matchesWithResults || 0 }}</div>
+            <div class="sp-stat-box">
+              <div class="sp-stat-box__label">有结果</div>
+              <div class="sp-stat-box__value">{{ recommendationsState.stats.matchesWithResults || 0 }}</div>
             </div>
-            <div class="stat-card">
-              <div class="muted-label">整体准确率</div>
-              <div class="stat-card-value">{{ recommendationsState.stats.overallAccuracy || 0 }}%</div>
+            <div class="sp-stat-box sp-stat-box--highlight">
+              <div class="sp-stat-box__label">准确率</div>
+              <div class="sp-stat-box__value">{{ recommendationsState.stats.overallAccuracy || 0 }}%</div>
             </div>
-            <div class="stat-card">
-              <div class="muted-label">组合推荐正确</div>
-              <div class="stat-card-value">{{ recommendationsState.stats.comboRecommendationCorrect || 0 }}</div>
+            <div class="sp-stat-box">
+              <div class="sp-stat-box__label">组合正确</div>
+              <div class="sp-stat-box__value">{{ recommendationsState.stats.comboRecommendationCorrect || 0 }}</div>
             </div>
           </div>
 
-          <div class="recommendation-stack">
-            <section v-for="([type, items]) in recommendationComparisonGroups" :key="type" class="surface-block">
-              <h3 class="section-heading">{{ typeName(type) }}</h3>
-              <div class="item-list">
-                <article v-for="item in items" :key="item.id || `${type}-${item.match?.homeTeam}-${item.match?.awayTeam}`" class="item-card">
-                  <div class="panel-header">
+          <div class="sp-rec-stack">
+            <section v-for="([type, items]) in recommendationComparisonGroups" :key="type" class="sp-rec-group">
+              <h3 class="sp-rec-group__title">{{ typeName(type) }}</h3>
+              <div class="sp-card-grid">
+                <article v-for="item in items" :key="item.id || `${type}-${item.match?.homeTeam}-${item.match?.awayTeam}`" class="sp-pred-card">
+                  <div class="sp-pred-card__header">
                     <div>
-                      <h4 class="panel-title">{{ item.match?.homeTeam || '未知' }} vs {{ item.match?.awayTeam || '未知' }}</h4>
-                      <p class="panel-subtitle">{{ item.match?.league || '未知联赛' }}</p>
+                      <div class="sp-pred-card__league">{{ item.match?.league || '未知联赛' }}</div>
+                      <h4 class="sp-pred-card__teams">{{ item.match?.homeTeam || '未知' }} vs {{ item.match?.awayTeam || '未知' }}</h4>
                     </div>
-                    <span class="status-pill" :class="confidenceClass(item.comparison?.accuracy)">
+                    <span class="sp-badge" :class="confidenceClass(item.comparison?.accuracy)">
                       {{ item.hasOfficialResult && item.comparison ? accuracyText(item.comparison.accuracy) : '暂无结果' }}
                     </span>
                   </div>
-
-                  <div v-if="item.hasOfficialResult" class="detail-grid">
-                    <div class="surface-block">
-                      <div class="section-heading">推荐信息</div>
-                      <p class="muted-text">推荐值：{{ renderRecommendedValue(type, item.match || {}) }}</p>
-                      <p class="muted-text">信心度：{{ item.match?.confidence || '未知' }}%</p>
-                      <div v-if="type === 'scoreRecommendation' && item.match?.scoreOptions?.length" class="score-grid" style="margin-top: 12px;">
+                  <div v-if="item.hasOfficialResult" class="sp-compare-grid">
+                    <div class="sp-compare-col">
+                      <div class="sp-compare-col__title">推荐</div>
+                      <div class="sp-kv"><span class="sp-kv__k">推荐值</span><span class="sp-kv__v">{{ renderRecommendedValue(type, item.match || {}) }}</span></div>
+                      <div class="sp-kv"><span class="sp-kv__k">信心度</span><span class="sp-kv__v">{{ item.match?.confidence || '未知' }}%</span></div>
+                      <div v-if="type === 'scoreRecommendation' && item.match?.scoreOptions?.length" class="sp-score-grid">
                         <div
                           v-for="option in item.match.scoreOptions"
                           :key="`${item.match.homeTeam}-${option.score}`"
-                          class="score-option"
-                          :class="{ 'is-primary': option.score === item.actualResult?.score }"
+                          class="sp-score-chip"
+                          :class="{ 'is-hit': option.score === item.actualResult?.score }"
                         >
                           <strong>{{ option.score }}</strong>
-                          <div class="muted-label">{{ option.confidence }}%</div>
+                          <small>{{ option.confidence }}%</small>
                         </div>
                       </div>
                     </div>
-                    <div class="surface-block">
-                      <div class="section-heading">实际结果</div>
-                      <p class="muted-text">实际值：{{ renderActualValue(type, item.actualResult || {}) }}</p>
-                      <p class="muted-text">比分：{{ item.actualResult?.score || '未知' }}</p>
-                      <p class="muted-text">胜负：{{ item.actualResult?.fullTimeResult || '未知' }}</p>
+                    <div class="sp-compare-col sp-compare-col--actual">
+                      <div class="sp-compare-col__title">实际</div>
+                      <div class="sp-kv"><span class="sp-kv__k">实际值</span><span class="sp-kv__v">{{ renderActualValue(type, item.actualResult || {}) }}</span></div>
+                      <div class="sp-kv"><span class="sp-kv__k">比分</span><span class="sp-kv__v">{{ item.actualResult?.score || '未知' }}</span></div>
+                      <div class="sp-kv"><span class="sp-kv__k">胜负</span><span class="sp-kv__v">{{ item.actualResult?.fullTimeResult || '未知' }}</span></div>
                     </div>
                   </div>
-                  <div v-else class="surface-block">⚠️ 该比赛暂无官方结果。</div>
+                  <div v-else class="sp-no-result">暂无官方结果</div>
                 </article>
               </div>
             </section>
           </div>
         </template>
+
+        <!-- Today Recommendations -->
         <template v-else-if="recommendationSections.length">
-          <div class="recommendation-stack">
-            <section v-for="section in recommendationSections" :key="section.type" class="surface-block">
-              <div class="panel-header">
-                <div>
-                  <h3 class="panel-title">{{ section.title }}<span v-if="section.comboType"> - {{ section.comboType }}</span></h3>
-                  <p class="panel-subtitle">{{ section.description }}</p>
-                </div>
+          <div class="sp-rec-stack">
+            <section v-for="section in recommendationSections" :key="section.type" class="sp-rec-group">
+              <div class="sp-rec-group__header">
+                <h3 class="sp-rec-group__title">
+                  {{ section.title }}<span v-if="section.comboType" class="sp-rec-group__combo"> - {{ section.comboType }}</span>
+                </h3>
+                <p v-if="section.description" class="sp-rec-group__desc">{{ section.description }}</p>
               </div>
 
-              <div v-if="section.combination" class="surface-block" style="margin-bottom: 14px;">
+              <div v-if="section.combination" class="sp-combo-badge">
                 <strong>组合：</strong> {{ section.combination }}
               </div>
 
-              <div class="item-list">
-                <article v-for="match in section.matches" :key="`${section.type}-${match.homeTeam}-${match.awayTeam}-${match.prediction || match.score || ''}`" class="item-card">
-                  <div class="panel-header">
+              <div class="sp-card-grid">
+                <article v-for="match in section.matches" :key="`${section.type}-${match.homeTeam}-${match.awayTeam}-${match.prediction || match.score || ''}`" class="sp-pred-card">
+                  <div class="sp-pred-card__header">
                     <div>
-                      <h4 class="panel-title">{{ match.homeTeam }}<span v-if="match.awayTeam"> vs {{ match.awayTeam }}</span></h4>
-                      <p class="panel-subtitle">{{ match.league || '推荐条目' }}</p>
+                      <h4 class="sp-pred-card__teams">{{ match.homeTeam }}<span v-if="match.awayTeam"> vs {{ match.awayTeam }}</span></h4>
+                      <div class="sp-pred-card__league">{{ match.league || '推荐条目' }}</div>
                     </div>
-                    <span class="status-pill" :class="confidenceClass(match.confidence)">{{ match.confidence || 0 }}%</span>
+                    <span class="sp-badge" :class="confidenceClass(match.confidence)">{{ match.confidence || 0 }}%</span>
                   </div>
-
-                  <div v-if="section.type === 'scoreRecommendation' && match.scoreOptions?.length" class="score-grid">
-                    <div v-for="(option, index) in match.scoreOptions" :key="`${match.homeTeam}-${option.score}`" class="score-option" :class="{ 'is-primary': index === 0 }">
+                  <div class="sp-progress">
+                    <div class="sp-progress__fill" :style="{ width: (match.confidence || 0) + '%' }"></div>
+                  </div>
+                  <div v-if="section.type === 'scoreRecommendation' && match.scoreOptions?.length" class="sp-score-grid">
+                    <div v-for="(option, index) in match.scoreOptions" :key="`${match.homeTeam}-${option.score}`" class="sp-score-chip" :class="{ 'is-hit': index === 0 }">
                       <strong>{{ option.score }}</strong>
-                      <div class="muted-label">{{ option.confidence }}%</div>
+                      <small>{{ option.confidence }}%</small>
                     </div>
                   </div>
-                  <div v-else class="detail-grid">
-                    <div class="surface-block">
-                      <div class="muted-label">推荐值</div>
-                      <div>{{ renderRecommendedValue(section.type, match) }}</div>
+                  <div v-else class="sp-detail-chips sp-detail-chips--two">
+                    <div class="sp-chip">
+                      <div class="sp-chip__label">推荐值</div>
+                      <div class="sp-chip__value">{{ renderRecommendedValue(section.type, match) }}</div>
                     </div>
-                    <div class="surface-block">
-                      <div class="muted-label">信心度</div>
-                      <div>{{ match.confidence || 0 }}%</div>
+                    <div class="sp-chip">
+                      <div class="sp-chip__label">信心度</div>
+                      <div class="sp-chip__value">{{ match.confidence || 0 }}%</div>
                     </div>
                   </div>
                 </article>
               </div>
             </section>
 
-            <section v-if="recommendationsState.recommendation?.summary" class="surface-block">
-              <h3 class="section-heading">📋 推荐总结</h3>
-              <p class="muted-text"><strong>最佳推荐：</strong>{{ recommendationsState.recommendation.summary.bestRecommendation || '暂无' }}</p>
-              <p class="muted-text"><strong>推荐理由：</strong>{{ recommendationsState.recommendation.summary.whyBest || '暂无' }}</p>
-              <p class="muted-text"><strong>风险提示：</strong>{{ recommendationsState.recommendation.summary.riskWarning || '暂无' }}</p>
+            <section v-if="recommendationsState.recommendation?.summary" class="sp-summary-card">
+              <h3 class="sp-summary-card__title">推荐总结</h3>
+              <div class="sp-summary-card__row"><span class="sp-summary-card__label">最佳推荐</span><span>{{ recommendationsState.recommendation.summary.bestRecommendation || '暂无' }}</span></div>
+              <div class="sp-summary-card__row"><span class="sp-summary-card__label">推荐理由</span><span>{{ recommendationsState.recommendation.summary.whyBest || '暂无' }}</span></div>
+              <div class="sp-summary-card__row"><span class="sp-summary-card__label">风险提示</span><span>{{ recommendationsState.recommendation.summary.riskWarning || '暂无' }}</span></div>
             </section>
           </div>
         </template>
-        <div v-else class="empty-state">
-          <div class="empty-state-icon">⭐</div>
+
+        <div v-else class="sp-empty">
+          <div class="sp-empty__icon">&#11088;</div>
           <p>{{ emptyMessageForRecommendation() }}</p>
         </div>
       </section>
 
-      <section class="panel page-grid">
-        <div class="panel-header">
+      <!-- ========== HISTORY TAB ========== -->
+      <section v-if="activeTab === 'history'" class="sp-section">
+        <div class="sp-section-header">
           <div>
-            <h2 class="panel-title">📜 历史推荐</h2>
-            <p class="panel-subtitle">读取历史推荐数据，并按推荐类型过滤。</p>
+            <h2 class="sp-section-title">历史推荐</h2>
+            <p class="sp-section-sub">读取历史推荐数据</p>
+          </div>
+          <div class="sp-actions">
+            <select v-model="historyTypeFilter" class="sp-select">
+              <option value="">全部类型</option>
+              <option value="goalRecommendation">进球数推荐</option>
+              <option value="halfFullTimeRecommendation">半全场推荐</option>
+              <option value="scoreRecommendation">比分推荐</option>
+              <option value="comboRecommendation">二串一组合</option>
+            </select>
+            <button class="sp-btn sp-btn--primary" :disabled="historyState.loading" @click="loadHistoryRecommendations">刷新</button>
           </div>
         </div>
 
-        <div class="field-row">
-          <select v-model="historyTypeFilter" class="select">
-            <option value="">全部推荐类型</option>
-            <option value="goalRecommendation">进球数推荐</option>
-            <option value="halfFullTimeRecommendation">半全场推荐</option>
-            <option value="scoreRecommendation">比分推荐</option>
-            <option value="comboRecommendation">二串一组合推荐</option>
-          </select>
-          <button class="btn btn--info" @click="loadHistoryRecommendations">刷新数据</button>
-        </div>
-
-        <div v-if="historyState.loading" class="empty-state">
-          <div class="empty-state-icon">⏳</div>
+        <div v-if="historyState.loading" class="sp-empty">
+          <div class="sp-spinner"></div>
           <p>正在加载历史推荐...</p>
         </div>
-        <div v-else-if="historyState.error" class="message-box message-box--error">{{ historyState.error }}</div>
+        <div v-else-if="historyState.error" class="sp-error">{{ historyState.error }}</div>
         <template v-else>
-          <div v-if="historyStatistics.length" class="card-grid">
-            <article v-for="([type, stat]) in historyStatistics" :key="type" class="item-card">
-              <div class="panel-header">
-                <h3 class="panel-title">{{ stat.typeName || typeName(type) }}</h3>
-                <span class="status-pill" :class="confidenceClass(stat.winRate)">{{ stat.winRate || 0 }}%</span>
-              </div>
-              <div class="detail-grid">
-                <div class="surface-block">
-                  <div class="muted-label">总场次</div>
-                  <div>{{ stat.total || 0 }}</div>
-                </div>
-                <div class="surface-block">
-                  <div class="muted-label">正确</div>
-                  <div>{{ stat.correct || 0 }}</div>
-                </div>
-                <div class="surface-block">
-                  <div class="muted-label">错误</div>
-                  <div>{{ stat.wrong || 0 }}</div>
-                </div>
-                <div class="surface-block">
-                  <div class="muted-label">连胜/连黑</div>
-                  <div>{{ streakText(stat.currentStreak) }}</div>
-                </div>
+          <!-- Statistics Cards -->
+          <div v-if="historyStatistics.length" class="sp-stats-bar">
+            <article v-for="([type, stat]) in historyStatistics" :key="type" class="sp-stat-box sp-stat-box--card">
+              <div class="sp-stat-box__label">{{ stat.typeName || typeName(type) }}</div>
+              <div class="sp-stat-box__value">{{ stat.winRate || 0 }}%</div>
+              <div class="sp-stat-box__detail">
+                <span>{{ stat.correct || 0 }}胜</span>
+                <span>{{ stat.wrong || 0 }}负</span>
+                <span>{{ streakText(stat.currentStreak) }}</span>
               </div>
             </article>
           </div>
 
-          <div v-if="historyState.items.length" class="table-card">
-            <div class="table-wrap">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>日期</th>
-                    <th>类型</th>
-                    <th>比赛</th>
-                    <th>推荐</th>
-                    <th>实际</th>
-                    <th>结果</th>
-                    <th>走势</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in historyState.items" :key="item.id || `${item.date}-${item.type}-${item.homeTeam}-${item.awayTeam}`">
-                    <td>{{ item.date }}</td>
-                    <td>{{ item.typeName || typeName(item.type) }}</td>
-                    <td>
-                      <strong>{{ item.type === 'comboRecommendation' ? item.homeTeam : `${item.homeTeam} vs ${item.awayTeam}` }}</strong>
-                      <div class="muted-label">{{ item.league || '-' }}</div>
-                    </td>
-                    <td>{{ item.recommended || '-' }}</td>
-                    <td>{{ item.actual || (item.hasResult ? '待开奖' : '-') }}</td>
-                    <td>
-                      <span class="status-pill" :class="historyResultClass(item)">{{ historyResultText(item) }}</span>
-                    </td>
-                    <td>{{ item.streak || '-' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <!-- History Table -->
+          <div v-if="historyState.items.length" class="sp-table-wrap">
+            <table class="sp-table">
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>类型</th>
+                  <th>比赛</th>
+                  <th>推荐</th>
+                  <th>实际</th>
+                  <th>结果</th>
+                  <th>走势</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in historyState.items" :key="item.id || `${item.date}-${item.type}-${item.homeTeam}-${item.awayTeam}`">
+                  <td>{{ item.date }}</td>
+                  <td>{{ item.typeName || typeName(item.type) }}</td>
+                  <td>
+                    <strong>{{ item.type === 'comboRecommendation' ? item.homeTeam : `${item.homeTeam} vs ${item.awayTeam}` }}</strong>
+                    <div class="sp-table__sub">{{ item.league || '-' }}</div>
+                  </td>
+                  <td>{{ item.recommended || '-' }}</td>
+                  <td>{{ item.actual || (item.hasResult ? '待开奖' : '-') }}</td>
+                  <td>
+                    <span class="sp-badge" :class="historyResultClass(item)">{{ historyResultText(item) }}</span>
+                  </td>
+                  <td>{{ item.streak || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <div v-else class="empty-state">
-            <div class="empty-state-icon">📜</div>
-            <p>{{ historyState.loaded ? '暂无历史推荐数据' : '点击“历史推荐”按钮加载历史数据' }}</p>
+          <div v-else class="sp-empty">
+            <div class="sp-empty__icon">&#128220;</div>
+            <p>{{ historyState.loaded ? '暂无历史推荐数据' : '点击"刷新"加载历史数据' }}</p>
           </div>
         </template>
       </section>
+
     </div>
   </main>
 </template>
+
+<style scoped>
+/* ============================================
+   Sport Prediction — Modern Sports Theme
+   ============================================ */
+
+/* --- Page & Container --- */
+.sp-page {
+  min-height: 100vh;
+  padding: 0;
+  background: linear-gradient(170deg, #022c22 0%, #064e3b 35%, #0f172a 100%);
+  color: #ecfdf5;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.sp-container {
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+  display: grid;
+  gap: 24px;
+}
+
+/* --- Header --- */
+.sp-header {
+  text-align: center;
+  padding: 48px 24px 32px;
+}
+
+.sp-header__badge {
+  display: inline-block;
+  padding: 6px 18px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  margin-bottom: 16px;
+}
+
+.sp-header__title {
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 3.2rem);
+  font-weight: 800;
+  line-height: 1.1;
+  background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 40%, #6ee7b7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.sp-header__config {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 6px 8px 6px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sp-config-label {
+  color: #6ee7b7;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.sp-config-input {
+  border: none;
+  background: transparent;
+  color: #d1fae5;
+  font-size: 0.85rem;
+  width: 240px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-family: inherit;
+}
+
+.sp-config-input::placeholder {
+  color: rgba(209, 250, 229, 0.35);
+}
+
+.sp-config-input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* --- Tab Navigation --- */
+.sp-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(6, 78, 59, 0.6);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.sp-tab {
+  padding: 12px 28px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: #a7f3d0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, transform 0.15s;
+  font-family: inherit;
+}
+
+.sp-tab:hover {
+  background: rgba(16, 185, 129, 0.12);
+  color: #ecfdf5;
+}
+
+.sp-tab.is-active {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+}
+
+/* --- Section --- */
+.sp-section {
+  animation: spFadeIn 0.3s ease;
+}
+
+@keyframes spFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sp-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.sp-section-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #ecfdf5;
+}
+
+.sp-section-sub {
+  margin: 4px 0 0;
+  color: #6ee7b7;
+  font-size: 0.9rem;
+}
+
+.sp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* --- Buttons --- */
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+  font-family: inherit;
+}
+
+.sp-btn:hover {
+  transform: translateY(-1px);
+}
+
+.sp-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.sp-btn--primary {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
+}
+
+.sp-btn--gold {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25);
+}
+
+.sp-btn--outline {
+  background: transparent;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
+}
+
+.sp-btn--outline:hover {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+/* --- Select --- */
+.sp-select {
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(6, 78, 59, 0.5);
+  color: #d1fae5;
+  font-size: 0.88rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.sp-select option {
+  color: #064e3b;
+  background: #ecfdf5;
+}
+
+/* --- Empty & Error --- */
+.sp-empty {
+  padding: 48px 24px;
+  text-align: center;
+  border-radius: 16px;
+  background: rgba(6, 78, 59, 0.3);
+  border: 1px dashed rgba(16, 185, 129, 0.2);
+}
+
+.sp-empty__icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+}
+
+.sp-empty p {
+  margin: 0;
+  color: #a7f3d0;
+  font-size: 0.95rem;
+}
+
+.sp-error {
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fecaca;
+  font-size: 0.92rem;
+}
+
+/* --- Spinner --- */
+.sp-spinner {
+  width: 36px;
+  height: 36px;
+  margin: 0 auto 16px;
+  border: 3px solid rgba(16, 185, 129, 0.2);
+  border-top-color: #10b981;
+  border-radius: 50%;
+  animation: spSpin 0.7s linear infinite;
+}
+
+@keyframes spSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* --- Match Grid & Cards (Scoreboard style) --- */
+.sp-match-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.sp-match-card {
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(6, 78, 59, 0.45);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+.sp-match-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.sp-match-card__league {
+  color: #f59e0b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.sp-match-card__body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.sp-match-card__team {
+  flex: 1;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #ecfdf5;
+  line-height: 1.3;
+}
+
+.sp-match-card__team--home {
+  text-align: right;
+}
+
+.sp-match-card__team--away {
+  text-align: left;
+}
+
+.sp-match-card__vs {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid #10b981;
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+  font-size: 0.82rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.sp-match-card__footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(16, 185, 129, 0.1);
+  color: #6ee7b7;
+  font-size: 0.82rem;
+}
+
+.sp-match-card__id {
+  color: rgba(167, 243, 208, 0.5);
+}
+
+/* --- Badge (confidence / result) --- */
+.sp-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  flex-shrink: 0;
+}
+
+.sp-badge.status-pill--success {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.sp-badge.status-pill--warning {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fde68a;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.sp-badge.status-pill--danger {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fecaca;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.sp-badge.status-pill--muted {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+}
+
+/* --- Date Badge --- */
+.sp-date-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #6ee7b7;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+/* --- Stats Bar --- */
+.sp-stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.sp-stat-box {
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(6, 78, 59, 0.4);
+  border: 1px solid rgba(16, 185, 129, 0.12);
+  text-align: center;
+}
+
+.sp-stat-box--highlight {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.sp-stat-box--card {
+  text-align: left;
+}
+
+.sp-stat-box__label {
+  color: #6ee7b7;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.sp-stat-box__value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #ecfdf5;
+}
+
+.sp-stat-box__detail {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  color: #a7f3d0;
+  font-size: 0.82rem;
+}
+
+/* --- Prediction Card Grid --- */
+.sp-card-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
+
+.sp-pred-card {
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(6, 78, 59, 0.4);
+  border: 1px solid rgba(16, 185, 129, 0.12);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+.sp-pred-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.sp-pred-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.sp-pred-card__league {
+  color: #f59e0b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sp-pred-card__teams {
+  margin: 4px 0 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #ecfdf5;
+}
+
+/* --- Progress Bar --- */
+.sp-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.sp-progress__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #10b981, #f59e0b);
+  transition: width 0.5s ease;
+}
+
+/* --- Detail Chips --- */
+.sp-detail-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.sp-detail-chips--two {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.sp-chip {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.08);
+  text-align: center;
+}
+
+.sp-chip__label {
+  color: #6ee7b7;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.sp-chip__value {
+  color: #ecfdf5;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+/* --- Compare Grid --- */
+.sp-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.sp-compare-col {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.1);
+}
+
+.sp-compare-col--actual {
+  background: rgba(245, 158, 11, 0.06);
+  border-color: rgba(245, 158, 11, 0.12);
+}
+
+.sp-compare-col__title {
+  color: #6ee7b7;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+}
+
+.sp-compare-col--actual .sp-compare-col__title {
+  color: #fbbf24;
+}
+
+.sp-kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.sp-kv:last-child {
+  border-bottom: none;
+}
+
+.sp-kv__k {
+  color: #a7f3d0;
+  font-size: 0.82rem;
+}
+
+.sp-kv__v {
+  color: #ecfdf5;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.sp-no-result {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #a7f3d0;
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+/* --- Score Grid --- */
+.sp-score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sp-score-chip {
+  padding: 10px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  text-align: center;
+}
+
+.sp-score-chip strong {
+  display: block;
+  color: #ecfdf5;
+  font-size: 0.95rem;
+}
+
+.sp-score-chip small {
+  color: #6ee7b7;
+  font-size: 0.75rem;
+}
+
+.sp-score-chip.is-hit {
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  background: rgba(16, 185, 129, 0.15);
+}
+
+/* --- Recommendation Stack --- */
+.sp-rec-stack {
+  display: grid;
+  gap: 20px;
+}
+
+.sp-rec-group {
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(6, 78, 59, 0.3);
+  border: 1px solid rgba(16, 185, 129, 0.1);
+}
+
+.sp-rec-group__header {
+  margin-bottom: 16px;
+}
+
+.sp-rec-group__title {
+  margin: 0 0 14px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #6ee7b7;
+}
+
+.sp-rec-group__combo {
+  color: #a7f3d0;
+  font-weight: 500;
+}
+
+.sp-rec-group__desc {
+  margin: 4px 0 0;
+  color: #a7f3d0;
+  font-size: 0.88rem;
+}
+
+.sp-combo-badge {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  color: #fde68a;
+  font-size: 0.9rem;
+  margin-bottom: 14px;
+}
+
+/* --- Summary Card --- */
+.sp-summary-card {
+  padding: 24px;
+  border-radius: 16px;
+  background: rgba(6, 78, 59, 0.35);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-left: 4px solid #10b981;
+}
+
+.sp-summary-card__title {
+  margin: 0 0 16px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #6ee7b7;
+}
+
+.sp-summary-card__row {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.08);
+  color: #d1fae5;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.sp-summary-card__row:last-child {
+  border-bottom: none;
+}
+
+.sp-summary-card__label {
+  color: #6ee7b7;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* --- History Table --- */
+.sp-table-wrap {
+  overflow-x: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(16, 185, 129, 0.12);
+  background: rgba(6, 78, 59, 0.3);
+}
+
+.sp-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.sp-table th {
+  padding: 14px 16px;
+  text-align: left;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #6ee7b7;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(16, 185, 129, 0.06);
+  border-bottom: 1px solid rgba(16, 185, 129, 0.12);
+}
+
+.sp-table td {
+  padding: 14px 16px;
+  color: #d1fae5;
+  font-size: 0.88rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: top;
+}
+
+.sp-table tbody tr:hover {
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.sp-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.sp-table__sub {
+  color: #6ee7b7;
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
+
+/* --- Responsive --- */
+@media (max-width: 640px) {
+  .sp-container {
+    padding: 20px 14px 48px;
+  }
+
+  .sp-header {
+    padding: 32px 16px 24px;
+  }
+
+  .sp-config-input {
+    width: 160px;
+  }
+
+  .sp-tabs {
+    border-radius: 14px;
+  }
+
+  .sp-tab {
+    padding: 10px 16px;
+    font-size: 0.88rem;
+  }
+
+  .sp-section-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .sp-match-grid,
+  .sp-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sp-detail-chips {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sp-compare-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sp-stats-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sp-match-card__body {
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+  }
+
+  .sp-match-card__team--home,
+  .sp-match-card__team--away {
+    text-align: center;
+  }
+}
+</style>
