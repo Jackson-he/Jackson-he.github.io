@@ -156,15 +156,6 @@ const currentPriceClass = computed(() => {
   return 'ticker--flat'
 })
 
-const signalBadge = computed(() => {
-  const side = dashboard.signal.side === 'long' ? '🔴 做多' : '🟢 做空'
-  const level = dashboard.signal.level === 'standard' ? '🔥 标准' : '✨ 谨慎'
-  return `${level} · ${side}`
-})
-const sizingTitle = computed(() => {
-  if (dashboard.sizing.maxVolume > 0) return `当前最多可开 ${dashboard.sizing.maxVolume} 手`
-  return '当前条件下不可开仓'
-})
 const sizingSummary = computed(() => {
   if (dashboard.sizing.reason) return dashboard.sizing.reason
   return '已按保证金不超过可支配资金、单笔止损不超过总资金 1% 测算。'
@@ -173,17 +164,6 @@ const sizingSummary = computed(() => {
 const selectedWatchItem = computed(() => watchItems.value.find((item) => item.symbol === selectedSymbol.value) || null)
 const selectedSymbolLabel = computed(() => selectedWatchItem.value?.displayName || selectedSymbol.value || '--')
 const selectedSymbolDisplay = computed(() => selectedWatchItem.value?.symbolDisplay || selectedSymbolLabel.value)
-
-const metricCards = computed(() => [
-  ['最新价', dashboard.metrics.price.toFixed(2)],
-  ['涨跌幅', `${dashboard.metrics.changePct.toFixed(2)}%`],
-  ['成交量', numberCompact(dashboard.metrics.volume)],
-  ['MA6', dashboard.metrics.ma6.toFixed(2)],
-  ['MADKX', dashboard.metrics.madkx.toFixed(2)],
-  ['可用资金', currency(dashboard.metrics.available)],
-  ['账户权益', currency(dashboard.metrics.equity)],
-  ['保证金', currency(dashboard.metrics.margin)],
-])
 
 watch(apiUrlInput, (value) => {
   apiUrl.value = normalizeApiBase(value)
@@ -226,8 +206,9 @@ onBeforeUnmount(() => {
 
 function updateChartWidth() {
   if (typeof window === 'undefined') return
-  const width = Math.min(Math.max(window.innerWidth - 420, 520), 980)
+  const width = Math.min(Math.max(window.innerWidth - 560, 400), 980)
   chartState.width = width
+  chartState.height = Math.min(Math.max(window.innerHeight - 260, 240), 600)
 }
 
 function clearRefreshTimer() {
@@ -502,122 +483,143 @@ function currency(value) {
 </script>
 
 <template>
-  <main class="page page--dark">
+  <main class="page page--dark fm-page">
     <div class="page-container futures-monitor">
-      <RouterLink to="/projects/tools" class="back-link">← 返回工具页</RouterLink>
+      <!-- Top bar -->
+      <header class="fm-topbar">
+        <RouterLink to="/projects/tools" class="fm-back">← 返回</RouterLink>
+        <div class="fm-topbar-brand">
+          <span class="fm-brand-label">FUTURES TERMINAL</span>
+          <span class="fm-brand-sep">|</span>
+          <span class="fm-brand-symbol">{{ selectedSymbolLabel }}</span>
+        </div>
+        <div class="fm-topbar-status">
+          <span class="fm-status-dot" :class="dashboard.mode === 'live' ? 'fm-status-dot--live' : 'fm-status-dot--offline'"></span>
+          <span class="fm-status-text">{{ dashboard.sourceLabel }}</span>
+          <span class="fm-status-sep">·</span>
+          <span class="fm-status-stream">{{ streamState.connected ? 'SSE' : 'POLL' }}</span>
+          <span class="fm-status-sep">·</span>
+          <span class="fm-status-time">{{ dashboard.lastUpdatedAt || '--' }}</span>
+        </div>
+      </header>
 
-      <section class="hero futures-hero">
-        <div>
-          <p class="eyebrow">Futures Terminal</p>
-          <h1 class="hero-title">期货实时监控面板</h1>
-          <p class="hero-subtitle">
-            当前页面按飞书提醒队列展示合约，最新进入队列的提醒会排在最前面，并支持继续查看对应合约的实时数据。
-          </p>
-        </div>
-        <div class="surface-block hero-status">
-          <div class="status-chip" :class="dashboard.mode === 'live' ? 'status-chip--success' : 'status-chip--warning'">
-            {{ dashboard.sourceLabel }}
-          </div>
-          <div class="muted-text">最后更新：{{ dashboard.lastUpdatedAt || '--' }}</div>
-          <div class="muted-text">{{ streamState.connected ? 'SSE 实时推送已连接' : (streamState.error || '使用轮询更新') }}</div>
-        </div>
+      <!-- Config strip -->
+      <section class="fm-config-strip">
+        <label class="fm-config-field">
+          <span class="fm-config-label">API</span>
+          <input v-model="apiUrlInput" class="fm-config-input" placeholder="http://localhost:3201" />
+        </label>
+        <label class="fm-config-field fm-config-field--narrow">
+          <span class="fm-config-label">周期</span>
+          <select v-model="selectedInterval" class="fm-config-input fm-config-select">
+            <option v-for="item in INTERVAL_OPTIONS" :key="item.value" :value="item.value">
+              {{ item.label }}
+            </option>
+          </select>
+        </label>
+        <label class="fm-config-field">
+          <span class="fm-config-label">总资金</span>
+          <input
+            v-model.lazy="capitalEquityInput"
+            class="fm-config-input"
+            type="number"
+            min="0"
+            step="1000"
+            placeholder="后端权益"
+          />
+        </label>
+        <label class="fm-config-field">
+          <span class="fm-config-label">可用</span>
+          <input
+            v-model.lazy="capitalAvailableInput"
+            class="fm-config-input"
+            type="number"
+            min="0"
+            step="1000"
+            placeholder="后端可用"
+          />
+        </label>
       </section>
 
-      <section class="panel config-panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">连接配置</h2>
-            <p class="panel-subtitle">留空时默认使用后端实时账户数据；也可以手动输入资金做开仓测算。</p>
+      <!-- Main 3-column layout -->
+      <section class="fm-layout">
+        <!-- Watchlist -->
+        <aside class="fm-panel fm-watchlist">
+          <div class="fm-panel-head">
+            <h2 class="fm-panel-title">提醒队列</h2>
+            <span class="fm-panel-badge">{{ watchItems.length }}</span>
           </div>
-        </div>
-        <div class="config-grid">
-          <label class="field-group">
-            <span class="field-label">后端 API 地址</span>
-            <input v-model="apiUrlInput" class="input" placeholder="http://localhost:3201" />
-          </label>
-          <label class="field-group">
-            <span class="field-label">监控周期</span>
-            <select v-model="selectedInterval" class="select">
-              <option v-for="item in INTERVAL_OPTIONS" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-          </label>
-          <label class="field-group">
-            <span class="field-label">账户总资金</span>
-            <input
-              v-model.lazy="capitalEquityInput"
-              class="input"
-              type="number"
-              min="0"
-              step="1000"
-              placeholder="留空则使用后端账户权益"
-            />
-            <small class="field-hint">用于计算单笔止损上限 = 总资金 × 1%</small>
-          </label>
-          <label class="field-group">
-            <span class="field-label">剩余可支配资金</span>
-            <input
-              v-model.lazy="capitalAvailableInput"
-              class="input"
-              type="number"
-              min="0"
-              step="1000"
-              placeholder="留空则使用后端可用资金"
-            />
-            <small class="field-hint">用于判断保证金最多能支持开几手</small>
-          </label>
-        </div>
-      </section>
-
-      <section class="monitor-layout">
-        <aside class="panel watch-panel">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-title">提醒队列</h2>
-              <p class="panel-subtitle">仅展示已发送飞书提醒的合约，最新提醒排在最前面。</p>
-            </div>
-          </div>
-          <div class="symbol-list">
+          <div class="fm-symbol-list">
             <template v-if="watchItems.length">
               <button
                 v-for="item in watchItems"
                 :key="item.symbol"
-                class="symbol-item"
-                :class="{ 'symbol-item--active': item.symbol === selectedSymbol }"
+                class="fm-symbol-item"
+                :class="{ 'fm-symbol-item--active': item.symbol === selectedSymbol }"
                 @click="selectedSymbol = item.symbol"
               >
-                <span class="symbol-text">
-                  <strong>{{ item.displayName || item.symbol }}</strong>
-                  <small class="symbol-code">{{ item.symbol }}</small>
-                  <small v-if="item.lastAlertAt" class="symbol-meta">提醒于 {{ item.lastAlertAt }}</small>
-                </span>
-                <small v-if="tradeSymbols.includes(item.symbol)" class="symbol-tag">交易</small>
+                <div class="fm-symbol-info">
+                  <strong class="fm-symbol-name">{{ item.displayName || item.symbol }}</strong>
+                  <small class="fm-symbol-code">{{ item.symbol }}</small>
+                  <small v-if="item.lastAlertAt" class="fm-symbol-time">{{ item.lastAlertAt }}</small>
+                </div>
+                <small v-if="tradeSymbols.includes(item.symbol)" class="fm-symbol-tag">TRADE</small>
               </button>
             </template>
-            <p v-else class="symbol-empty">暂无飞书提醒，合约会在提醒发出后进入队列。</p>
+            <p v-else class="fm-symbol-empty">暂无飞书提醒，合约会在提醒发出后进入队列。</p>
           </div>
         </aside>
 
-        <section class="panel chart-panel">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-title">{{ selectedSymbolLabel }} · {{ INTERVAL_OPTIONS.find((item) => item.value === selectedInterval)?.label }}</h2>
-              <p class="muted-text">{{ selectedSymbolDisplay }}</p>
-              <p class="panel-subtitle">{{ dashboard.signal.reason }}</p>
+        <!-- Chart -->
+        <section class="fm-panel fm-chart-panel">
+          <div class="fm-chart-header">
+            <div class="fm-chart-title-group">
+              <h2 class="fm-chart-title">{{ selectedSymbolLabel }}</h2>
+              <span class="fm-chart-interval">{{ INTERVAL_OPTIONS.find((item) => item.value === selectedInterval)?.label }}</span>
+              <span class="fm-chart-code">{{ selectedSymbolDisplay }}</span>
             </div>
-            <div class="ticker-box" :class="currentPriceClass">
-              <div class="ticker-price">{{ dashboard.metrics.price.toFixed(2) }}</div>
-              <div class="ticker-change">{{ dashboard.metrics.changePct.toFixed(2) }}%</div>
+            <div class="fm-ticker" :class="currentPriceClass">
+              <span class="fm-ticker-price">{{ dashboard.metrics.price.toFixed(2) }}</span>
+              <span class="fm-ticker-change" :class="dashboard.metrics.changePct >= 0 ? 'fm-ticker-change--up' : 'fm-ticker-change--down'">
+                {{ dashboard.metrics.changePct >= 0 ? '+' : '' }}{{ dashboard.metrics.changePct.toFixed(2) }}%
+              </span>
             </div>
           </div>
 
-          <div class="chart-shell">
-            <svg :viewBox="`0 0 ${chartState.width} ${chartState.height}`" class="kline-chart" role="img" aria-label="期货K线图">
+          <!-- Metric strip -->
+          <div class="fm-metric-strip">
+            <div class="fm-metric-item">
+              <span class="fm-metric-label">MA6</span>
+              <span class="fm-metric-value">{{ dashboard.metrics.ma6.toFixed(2) }}</span>
+            </div>
+            <div class="fm-metric-item">
+              <span class="fm-metric-label">MADKX</span>
+              <span class="fm-metric-value">{{ dashboard.metrics.madkx.toFixed(2) }}</span>
+            </div>
+            <div class="fm-metric-item">
+              <span class="fm-metric-label">成交量</span>
+              <span class="fm-metric-value">{{ numberCompact(dashboard.metrics.volume) }}</span>
+            </div>
+            <div class="fm-metric-item">
+              <span class="fm-metric-label">保证金</span>
+              <span class="fm-metric-value">{{ currency(dashboard.metrics.margin) }}</span>
+            </div>
+            <div class="fm-metric-item">
+              <span class="fm-metric-label">权益</span>
+              <span class="fm-metric-value">{{ currency(dashboard.metrics.equity) }}</span>
+            </div>
+            <div class="fm-metric-item">
+              <span class="fm-metric-label">可用</span>
+              <span class="fm-metric-value">{{ currency(dashboard.metrics.available) }}</span>
+            </div>
+          </div>
+
+          <div class="fm-chart-shell">
+            <svg :viewBox="`0 0 ${chartState.width} ${chartState.height}`" class="fm-kline-chart" role="img" aria-label="期货K线图">
               <defs>
                 <linearGradient id="chartBg" x1="0%" x2="0%" y1="0%" y2="100%">
-                  <stop offset="0%" stop-color="rgba(99,102,241,0.15)" />
-                  <stop offset="100%" stop-color="rgba(15,23,42,0.02)" />
+                  <stop offset="0%" stop-color="rgba(99,102,241,0.06)" />
+                  <stop offset="100%" stop-color="rgba(15,23,42,0.01)" />
                 </linearGradient>
               </defs>
 
@@ -626,7 +628,7 @@ function currency(value) {
                 :y="chartPadding.top"
                 :width="chartState.width - chartPadding.left - chartPadding.right"
                 :height="chartState.height - chartPadding.top - chartPadding.bottom"
-                rx="16"
+                rx="2"
                 fill="url(#chartBg)"
               />
 
@@ -636,19 +638,19 @@ function currency(value) {
                   :x2="chartState.width - chartPadding.right"
                   :y1="mark.y"
                   :y2="mark.y"
-                  class="axis-line"
+                  class="fm-axis-line"
                 />
                 <text
                   :x="12"
                   :y="mark.y + 4"
-                  class="axis-text"
+                  class="fm-axis-text"
                 >
                   {{ mark.label }}
                 </text>
               </g>
 
-              <path :d="madkxPath" class="indicator-line indicator-line--purple" />
-              <path :d="ma6Path" class="indicator-line indicator-line--yellow" />
+              <path :d="madkxPath" class="fm-indicator fm-indicator--purple" />
+              <path :d="ma6Path" class="fm-indicator fm-indicator--yellow" />
 
               <g v-for="bar in chartBars" :key="bar.time">
                 <line
@@ -656,15 +658,15 @@ function currency(value) {
                   :x2="bar.x + bar.candleWidth / 2"
                   :y1="bar.highY"
                   :y2="bar.lowY"
-                  :class="bar.close >= bar.open ? 'wick wick--up' : 'wick wick--down'"
+                  :class="bar.close >= bar.open ? 'fm-wick fm-wick--up' : 'fm-wick fm-wick--down'"
                 />
                 <rect
                   :x="bar.x"
                   :y="Math.min(bar.openY, bar.closeY)"
                   :width="bar.candleWidth"
                   :height="Math.max(Math.abs(bar.closeY - bar.openY), 2)"
-                  :class="bar.close >= bar.open ? 'candle candle--up' : 'candle candle--down'"
-                  rx="4"
+                  :class="bar.close >= bar.open ? 'fm-candle fm-candle--up' : 'fm-candle fm-candle--down'"
+                  rx="1"
                 />
               </g>
 
@@ -674,17 +676,17 @@ function currency(value) {
                   :x2="bar.x + bar.candleWidth / 2"
                   :y1="bar.signalMarker.side === 'long' ? bar.lowY + 6 : bar.highY - 6"
                   :y2="bar.signalMarker.side === 'long' ? bar.lowY + 42 : bar.highY - 42"
-                  :class="bar.signalMarker.side === 'long' ? 'signal-pole signal-pole--long' : 'signal-pole signal-pole--short'"
+                  :class="bar.signalMarker.side === 'long' ? 'fm-sig-pole fm-sig-pole--long' : 'fm-sig-pole fm-sig-pole--short'"
                 />
                 <path
                   :d="buildMarkerPath(bar)"
-                  :class="bar.signalMarker.side === 'long' ? 'signal-marker signal-marker--long' : 'signal-marker signal-marker--short'"
+                  :class="bar.signalMarker.side === 'long' ? 'fm-sig-marker fm-sig-marker--long' : 'fm-sig-marker fm-sig-marker--short'"
                 />
                 <text
                   :x="bar.x + bar.candleWidth / 2"
                   :y="bar.signalMarker.side === 'long' ? bar.lowY + 56 : bar.highY - 50"
                   text-anchor="middle"
-                  class="signal-label"
+                  class="fm-sig-label"
                 >
                   {{ markerLabel(bar.signalMarker) }}
                 </text>
@@ -692,121 +694,118 @@ function currency(value) {
             </svg>
           </div>
 
-          <div class="legend-row">
-            <span class="legend-item"><i class="legend-dot legend-dot--yellow"></i> MA6</span>
-            <span class="legend-item"><i class="legend-dot legend-dot--purple"></i> MADKX</span>
-            <span class="legend-item"><i class="legend-dot legend-dot--red"></i> 阳线</span>
-            <span class="legend-item"><i class="legend-dot legend-dot--green"></i> 阴线</span>
-            <span class="legend-item"><i class="legend-dot legend-dot--red"></i> 多头信号</span>
-            <span class="legend-item"><i class="legend-dot legend-dot--green"></i> 空头信号</span>
+          <div class="fm-legend">
+            <span class="fm-legend-item"><i class="fm-legend-dot fm-legend-dot--yellow"></i>MA6</span>
+            <span class="fm-legend-item"><i class="fm-legend-dot fm-legend-dot--purple"></i>MADKX</span>
+            <span class="fm-legend-item"><i class="fm-legend-dot fm-legend-dot--red"></i>阳线 / 多头</span>
+            <span class="fm-legend-item"><i class="fm-legend-dot fm-legend-dot--green"></i>阴线 / 空头</span>
+          </div>
+
+          <!-- Signal reason -->
+          <div v-if="dashboard.signal.reason" class="fm-signal-reason">
+            {{ dashboard.signal.reason }}
           </div>
         </section>
 
-        <aside class="panel side-panel">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-title">信号与账户</h2>
-              <p class="panel-subtitle">{{ signalBadge }}</p>
+        <!-- Right sidebar -->
+        <aside class="fm-panel fm-sidebar">
+          <!-- Signal -->
+          <div class="fm-sidebar-section">
+            <div class="fm-panel-head">
+              <h2 class="fm-panel-title">交易信号</h2>
+              <span class="fm-signal-badge" :class="dashboard.signal.side === 'long' ? 'fm-signal-badge--long' : 'fm-signal-badge--short'">
+                {{ dashboard.signal.side === 'long' ? 'LONG' : 'SHORT' }}
+              </span>
+            </div>
+            <div class="fm-signal-block">
+              <div class="fm-signal-status">{{ dashboard.signal.status }}</div>
+              <div class="fm-signal-level">{{ dashboard.signal.level === 'standard' ? '标准信号' : '谨慎信号' }}</div>
+              <small class="fm-dim-text">{{ dashboard.signal.updatedAt || '--' }}</small>
             </div>
           </div>
 
-          <div class="stats-grid">
-            <article
-              v-for="([label, value], index) in metricCards"
-              :key="`${label}-${index}`"
-              class="stat-card"
-            >
-              <div class="muted-text">{{ label }}</div>
-              <strong>{{ value }}</strong>
-            </article>
-          </div>
-
-          <div class="surface-block signal-card">
-            <div class="field-label">当前信号</div>
-            <div class="signal-title">{{ dashboard.signal.status }}</div>
-            <p class="muted-text">{{ dashboard.signal.reason }}</p>
-            <small class="muted-text">更新于 {{ dashboard.signal.updatedAt || '--' }}</small>
-          </div>
-
-          <div class="surface-block sizing-card">
-            <div class="field-label">开仓测算</div>
-            <div class="signal-title">{{ sizingTitle }}</div>
-            <p class="muted-text">{{ sizingSummary }}</p>
-            <div class="sizing-grid">
-              <article class="sizing-metric">
-                <span class="muted-text">总资金</span>
-                <strong>{{ currency(dashboard.capital.equity) }}</strong>
-                <small class="muted-text">{{ capitalSourceLabel(dashboard.capital.equitySource) }}</small>
-              </article>
-              <article class="sizing-metric">
-                <span class="muted-text">可支配资金</span>
-                <strong>{{ currency(dashboard.capital.available) }}</strong>
-                <small class="muted-text">{{ capitalSourceLabel(dashboard.capital.availableSource) }}</small>
-              </article>
-              <article class="sizing-metric">
-                <span class="muted-text">交易单位</span>
-                <strong>{{ dashboard.instrument.volumeMultiple || '--' }}</strong>
-                <small class="muted-text">每手合约乘数</small>
-              </article>
-              <article class="sizing-metric">
-                <span class="muted-text">每手保证金</span>
-                <strong>{{ currency(dashboard.sizing.perLotMargin || dashboard.instrument.marginPerLot) }}</strong>
-                <small class="muted-text">{{ marginSourceLabel(dashboard.instrument.marginSource) }}</small>
-              </article>
-              <article class="sizing-metric">
-                <span class="muted-text">单手止损额</span>
-                <strong>{{ currency(dashboard.sizing.perLotRisk) }}</strong>
-                <small class="muted-text">含手续费与滑点</small>
-              </article>
-              <article class="sizing-metric">
-                <span class="muted-text">1% 止损额度</span>
-                <strong>{{ currency(dashboard.sizing.riskBudget) }}</strong>
-                <small class="muted-text">总资金 × 1%</small>
-              </article>
-              <article class="sizing-metric">
-                <span class="muted-text">止损最多</span>
-                <strong>{{ lotCountText(dashboard.sizing.riskCap) }}</strong>
-                <small class="muted-text">按 1% 风险上限</small>
-              </article>
-              <article class="sizing-metric">
-                <span class="muted-text">保证金最多</span>
-                <strong>{{ lotCountText(dashboard.sizing.marginCap) }}</strong>
-                <small class="muted-text">按可支配资金上限</small>
-              </article>
+          <!-- Sizing -->
+          <div class="fm-sidebar-section">
+            <div class="fm-panel-head">
+              <h2 class="fm-panel-title">开仓测算</h2>
+              <span class="fm-sizing-result" :class="dashboard.sizing.maxVolume > 0 ? 'fm-sizing-result--ok' : 'fm-sizing-result--zero'">
+                {{ dashboard.sizing.maxVolume > 0 ? `${dashboard.sizing.maxVolume} 手` : '不可开' }}
+              </span>
             </div>
-            <div class="sizing-rule">
-              <div>参考价：{{ dashboard.signal.fillReference > 0 ? dashboard.signal.fillReference.toFixed(2) : '--' }}</div>
-              <div>止损价：{{ dashboard.signal.stopPrice > 0 ? dashboard.signal.stopPrice.toFixed(2) : '--' }}</div>
-              <div>止损距离：{{ dashboard.sizing.stopDistance > 0 ? dashboard.sizing.stopDistance.toFixed(2) : '--' }}</div>
+            <p class="fm-dim-text fm-sizing-note">{{ sizingSummary }}</p>
+            <div class="fm-data-grid">
+              <div class="fm-data-cell">
+                <span class="fm-data-label">总资金</span>
+                <span class="fm-data-value">{{ currency(dashboard.capital.equity) }}</span>
+                <span class="fm-data-source">{{ capitalSourceLabel(dashboard.capital.equitySource) }}</span>
+              </div>
+              <div class="fm-data-cell">
+                <span class="fm-data-label">可用</span>
+                <span class="fm-data-value">{{ currency(dashboard.capital.available) }}</span>
+                <span class="fm-data-source">{{ capitalSourceLabel(dashboard.capital.availableSource) }}</span>
+              </div>
+              <div class="fm-data-cell">
+                <span class="fm-data-label">合约乘数</span>
+                <span class="fm-data-value">{{ dashboard.instrument.volumeMultiple || '--' }}</span>
+              </div>
+              <div class="fm-data-cell">
+                <span class="fm-data-label">每手保证金</span>
+                <span class="fm-data-value">{{ currency(dashboard.sizing.perLotMargin || dashboard.instrument.marginPerLot) }}</span>
+                <span class="fm-data-source">{{ marginSourceLabel(dashboard.instrument.marginSource) }}</span>
+              </div>
+              <div class="fm-data-cell">
+                <span class="fm-data-label">单手止损</span>
+                <span class="fm-data-value">{{ currency(dashboard.sizing.perLotRisk) }}</span>
+              </div>
+              <div class="fm-data-cell">
+                <span class="fm-data-label">1%额度</span>
+                <span class="fm-data-value">{{ currency(dashboard.sizing.riskBudget) }}</span>
+              </div>
+              <div class="fm-data-cell">
+                <span class="fm-data-label">止损上限</span>
+                <span class="fm-data-value fm-data-value--accent">{{ lotCountText(dashboard.sizing.riskCap) }}</span>
+              </div>
+              <div class="fm-data-cell">
+                <span class="fm-data-label">保证金上限</span>
+                <span class="fm-data-value fm-data-value--accent">{{ lotCountText(dashboard.sizing.marginCap) }}</span>
+              </div>
+            </div>
+            <div class="fm-ref-strip">
+              <span>参考 {{ dashboard.signal.fillReference > 0 ? dashboard.signal.fillReference.toFixed(2) : '--' }}</span>
+              <span>止损 {{ dashboard.signal.stopPrice > 0 ? dashboard.signal.stopPrice.toFixed(2) : '--' }}</span>
+              <span>距离 {{ dashboard.sizing.stopDistance > 0 ? dashboard.sizing.stopDistance.toFixed(2) : '--' }}</span>
             </div>
           </div>
 
-          <div class="surface-block">
-            <div class="field-label">持仓快照</div>
-            <div v-if="dashboard.positions.length" class="position-list">
-              <div v-for="item in dashboard.positions" :key="`${item.symbol}-${item.side}`" class="position-item">
-                <div>
+          <!-- Positions -->
+          <div class="fm-sidebar-section">
+            <div class="fm-panel-head">
+              <h2 class="fm-panel-title">持仓</h2>
+              <span class="fm-panel-badge">{{ dashboard.positions.length }}</span>
+            </div>
+            <div v-if="dashboard.positions.length" class="fm-pos-list">
+              <div v-for="item in dashboard.positions" :key="`${item.symbol}-${item.side}`" class="fm-pos-item">
+                <div class="fm-pos-info">
                   <strong>{{ item.displayName || item.symbol }}</strong>
-                  <div class="muted-text">{{ item.symbol }}</div>
-                  <div class="muted-text">{{ item.side }} · {{ item.volume }} 手</div>
+                  <small class="fm-dim-text">{{ item.side }} · {{ item.volume }} 手 @ {{ item.entryPrice.toFixed(2) }}</small>
                 </div>
-                <div class="position-right">
-                  <div>{{ item.entryPrice.toFixed(2) }}</div>
-                  <div :class="item.pnl >= 0 ? 'pnl pnl--profit' : 'pnl pnl--loss'">
-                    {{ item.pnl >= 0 ? '🔴' : '🟢' }} {{ item.pnl.toFixed(2) }}
-                  </div>
+                <div :class="item.pnl >= 0 ? 'fm-pnl fm-pnl--profit' : 'fm-pnl fm-pnl--loss'">
+                  {{ item.pnl >= 0 ? '+' : '' }}{{ item.pnl.toFixed(2) }}
                 </div>
               </div>
             </div>
-            <p v-else class="muted-text">暂无持仓，后续会显示真实持仓信息。</p>
+            <p v-else class="fm-dim-text fm-empty-hint">暂无持仓</p>
           </div>
 
-          <div class="surface-block">
-            <div class="field-label">事件流</div>
-            <div class="event-list">
-              <div v-for="item in dashboard.events" :key="`${item.time}-${item.text}`" class="event-item">
-                <small class="muted-text">{{ item.time }}</small>
-                <div>{{ item.text }}</div>
+          <!-- Events -->
+          <div class="fm-sidebar-section">
+            <div class="fm-panel-head">
+              <h2 class="fm-panel-title">事件流</h2>
+            </div>
+            <div class="fm-event-list">
+              <div v-for="item in dashboard.events" :key="`${item.time}-${item.text}`" class="fm-event-item">
+                <span class="fm-event-time">{{ item.time }}</span>
+                <span class="fm-event-text">{{ item.text }}</span>
               </div>
             </div>
           </div>
@@ -817,345 +816,788 @@ function currency(value) {
 </template>
 
 <style scoped>
+/* ============================================
+   Futures Monitor — Professional Terminal UI
+   ============================================ */
+
+.fm-page {
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
 .futures-monitor {
   display: grid;
-  gap: 22px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 6px;
+  width: min(1440px, 100%);
+  height: 100%;
+  min-height: 0;
 }
 
-.futures-hero {
+/* ---------- Top Bar ---------- */
+.fm-topbar {
   display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: flex-start;
-}
-
-.hero-status {
-  min-width: 220px;
-}
-
-.status-chip {
-  display: inline-flex;
   align-items: center;
-  padding: 8px 12px;
-  border-radius: 999px;
-  font-weight: 700;
-  margin-bottom: 8px;
+  gap: 12px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  font-size: 0.82rem;
+  flex-shrink: 0;
 }
 
-.status-chip--success {
-  background: rgba(34, 197, 94, 0.18);
-  color: #86efac;
+.fm-back {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.78rem;
+  transition: background 0.15s;
+  white-space: nowrap;
 }
 
-.status-chip--warning {
-  background: rgba(245, 158, 11, 0.18);
-  color: #fde68a;
-}
-
-.config-panel {
-  padding-bottom: 18px;
-}
-
-.config-grid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.field-hint {
-  display: block;
-  margin-top: 6px;
-  color: rgba(255, 255, 255, 0.62);
-  line-height: 1.5;
-}
-
-.monitor-layout {
-  display: grid;
-  gap: 20px;
-  grid-template-columns: 220px minmax(0, 1fr) 320px;
-}
-
-.watch-panel,
-.side-panel,
-.chart-panel {
-  min-height: 620px;
-}
-
-.symbol-list,
-.position-list,
-.event-list {
-  display: grid;
-  gap: 10px;
-}
-
-.symbol-item {
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
+.fm-back:hover {
+  background: rgba(255, 255, 255, 0.12);
   color: #fff;
-  padding: 12px 14px;
-  border-radius: 14px;
-  text-align: left;
-  cursor: pointer;
-  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.fm-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+}
+
+.fm-brand-label {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.fm-brand-sep {
+  color: rgba(255, 255, 255, 0.15);
+}
+
+.fm-brand-symbol {
+  color: #e2e8f0;
+  font-weight: 700;
+}
+
+.fm-topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.76rem;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+.fm-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.fm-status-dot--live {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+
+.fm-status-dot--offline {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+}
+
+.fm-status-text {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.fm-status-sep {
+  color: rgba(255, 255, 255, 0.15);
+}
+
+.fm-status-stream {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.fm-status-time {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ---------- Config Strip ---------- */
+.fm-config-strip {
+  display: flex;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.fm-config-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.fm-config-field--narrow {
+  flex: 0 0 auto;
+  max-width: 130px;
+}
+
+.fm-config-label {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.fm-config-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+.fm-config-input:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.fm-config-input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.fm-config-select {
+  appearance: auto;
+}
+
+.fm-config-select option {
+  color: #0f172a;
+  background: #fff;
+}
+
+/* ---------- 3-Column Layout ---------- */
+.fm-layout {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 200px minmax(0, 1fr) 320px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fm-panel {
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.fm-panel-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
 }
 
-.symbol-text {
-  display: grid;
-  gap: 2px;
-}
-
-.symbol-code {
-  color: rgba(255, 255, 255, 0.58);
-}
-
-.symbol-meta {
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 0.75rem;
-}
-
-.symbol-item:hover,
-.symbol-item--active {
-  transform: translateY(-1px);
-  background: rgba(99, 102, 241, 0.22);
-  border-color: rgba(165, 180, 252, 0.4);
-}
-
-.symbol-tag {
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(239, 68, 68, 0.2);
-  color: #fca5a5;
-  font-size: 0.72rem;
-}
-
-.symbol-empty {
+.fm-panel-title {
   margin: 0;
-  padding: 18px 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.68);
-  line-height: 1.6;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+  letter-spacing: 0.02em;
 }
 
-.ticker-box {
-  min-width: 132px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  text-align: right;
+.fm-panel-badge {
+  padding: 1px 8px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.08);
-}
-
-.ticker--up {
-  color: #fca5a5;
-}
-
-.ticker--down {
-  color: #86efac;
-}
-
-.ticker--flat {
-  color: #e2e8f0;
-}
-
-.ticker-price {
-  font-size: 1.6rem;
-  font-weight: 800;
-}
-
-.ticker-change {
-  font-size: 0.96rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.7rem;
   font-weight: 600;
 }
 
-.chart-shell {
-  overflow: auto;
-  margin-bottom: 12px;
+/* ---------- Watchlist ---------- */
+.fm-watchlist {
+  min-height: 0;
 }
 
-.kline-chart {
+.fm-symbol-list {
+  display: grid;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.03);
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.fm-symbol-item {
   width: 100%;
-  min-height: 420px;
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  padding: 10px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  border-left: 2px solid transparent;
 }
 
-.axis-line {
-  stroke: rgba(255, 255, 255, 0.08);
-  stroke-dasharray: 3 4;
+.fm-symbol-item:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.axis-text {
-  fill: rgba(255, 255, 255, 0.55);
-  font-size: 12px;
+.fm-symbol-item--active {
+  background: rgba(99, 102, 241, 0.12);
+  border-left-color: #6366f1;
 }
 
-.indicator-line {
+.fm-symbol-info {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.fm-symbol-name {
+  font-size: 0.84rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fm-symbol-code {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.7rem;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+.fm-symbol-time {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.68rem;
+}
+
+.fm-symbol-tag {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.fm-symbol-empty {
+  margin: 0;
+  padding: 20px 14px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+/* ---------- Chart Panel ---------- */
+.fm-chart-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fm-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.fm-chart-title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fm-chart-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+}
+
+.fm-chart-interval {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.fm-chart-code {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.76rem;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+.fm-ticker {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+.ticker--up .fm-ticker-price,
+.ticker--up .fm-ticker-change { color: #ef4444; }
+.ticker--down .fm-ticker-price,
+.ticker--down .fm-ticker-change { color: #22c55e; }
+.ticker--flat .fm-ticker-price,
+.ticker--flat .fm-ticker-change { color: #94a3b8; }
+
+.fm-ticker-price {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.fm-ticker-change {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.fm-ticker-change--up { color: #ef4444; }
+.fm-ticker-change--down { color: #22c55e; }
+
+/* Metric strip under chart header */
+.fm-metric-strip {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  flex-shrink: 0;
+}
+
+.fm-metric-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.fm-metric-item:last-child {
+  border-right: none;
+}
+
+.fm-metric-label {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.fm-metric-value {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+/* Chart area */
+.fm-chart-shell {
+  flex: 1;
+  overflow: auto;
+  padding: 4px;
+  min-height: 0;
+}
+
+.fm-kline-chart {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+}
+
+.fm-axis-line {
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-dasharray: 2 3;
+}
+
+.fm-axis-text {
+  fill: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+.fm-indicator {
   fill: none;
-  stroke-width: 2.2;
+  stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.indicator-line--yellow {
-  stroke: #facc15;
+.fm-indicator--yellow { stroke: #eab308; }
+.fm-indicator--purple { stroke: #8b5cf6; }
+
+.fm-wick { stroke-width: 1.2; }
+.fm-wick--up, .fm-candle--up { stroke: #ef4444; fill: #ef4444; }
+.fm-wick--down, .fm-candle--down { stroke: #22c55e; fill: #22c55e; }
+
+.fm-sig-pole { stroke-width: 2; opacity: 0.75; }
+.fm-sig-pole--long { stroke: #ef4444; }
+.fm-sig-pole--short { stroke: #22c55e; }
+
+.fm-sig-marker { opacity: 0.9; }
+.fm-sig-marker--long { fill: #ef4444; }
+.fm-sig-marker--short { fill: #22c55e; }
+
+.fm-sig-label {
+  fill: rgba(255, 255, 255, 0.85);
+  font-size: 10px;
+  font-weight: 700;
 }
 
-.indicator-line--purple {
-  stroke: #a78bfa;
-}
-
-.wick {
-  stroke-width: 1.5;
-}
-
-.wick--up,
-.candle--up {
-  stroke: #ef4444;
-  fill: #ef4444;
-}
-
-.wick--down,
-.candle--down {
-  stroke: #22c55e;
-  fill: #22c55e;
-}
-
-.legend-row {
+/* Legend */
+.fm-legend {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 0.92rem;
+  gap: 14px;
+  padding: 4px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.72rem;
+  flex-shrink: 0;
 }
 
-.legend-item {
+.fm-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-}
-
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-}
-
-.legend-dot--yellow { background: #facc15; }
-.legend-dot--purple { background: #a78bfa; }
-.legend-dot--red { background: #ef4444; }
-.legend-dot--green { background: #22c55e; }
-
-.signal-marker {
-  opacity: 0.95;
-}
-
-.signal-pole {
-  stroke-width: 2.6;
-  opacity: 0.85;
-}
-
-.signal-pole--long {
-  stroke: #ef4444;
-}
-
-.signal-pole--short {
-  stroke: #22c55e;
-}
-
-.signal-marker--long {
-  fill: #ef4444;
-}
-
-.signal-marker--short {
-  fill: #22c55e;
-}
-
-.signal-label {
-  fill: rgba(255, 255, 255, 0.9);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.signal-card {
-  margin-top: 16px;
-}
-
-.sizing-card {
-  margin-top: 16px;
-}
-
-.signal-title {
-  margin: 8px 0 6px;
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-
-.sizing-grid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 14px;
-}
-
-.sizing-metric {
-  display: grid;
   gap: 4px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
 }
 
-.sizing-rule {
+.fm-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.fm-legend-dot--yellow { background: #eab308; }
+.fm-legend-dot--purple { background: #8b5cf6; }
+.fm-legend-dot--red { background: #ef4444; }
+.fm-legend-dot--green { background: #22c55e; }
+
+.fm-signal-reason {
+  padding: 6px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.76rem;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+/* ---------- Sidebar ---------- */
+.fm-sidebar {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.fm-sidebar-section {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fm-sidebar-section:last-child {
+  border-bottom: none;
+}
+
+.fm-dim-text {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.76rem;
+  margin: 0;
+}
+
+/* Signal block */
+.fm-signal-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.fm-signal-badge--long {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.fm-signal-badge--short {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.fm-signal-block {
+  padding: 10px 14px;
+}
+
+.fm-signal-status {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-bottom: 2px;
+}
+
+.fm-signal-level {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+}
+
+/* Sizing */
+.fm-sizing-result {
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+.fm-sizing-result--ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.fm-sizing-result--zero {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.fm-sizing-note {
+  padding: 0 14px 6px;
+  line-height: 1.5;
+}
+
+.fm-data-grid {
   display: grid;
-  gap: 6px;
-  margin-top: 14px;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 0.88rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  margin: 0 8px 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.position-item,
-.event-item {
+.fm-data-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.fm-data-label {
+  font-size: 0.64rem;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fm-data-value {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+.fm-data-value--accent {
+  color: #a5b4fc;
+}
+
+.fm-data-source {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.fm-ref-strip {
+  display: flex;
+  gap: 12px;
+  padding: 6px 14px 10px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.72rem;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+/* Positions */
+.fm-pos-list {
+  display: grid;
+  gap: 1px;
+}
+
+.fm-pos-item {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+}
+
+.fm-pos-info {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.fm-pos-info strong {
+  font-size: 0.82rem;
+}
+
+.fm-pnl {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  font-size: 0.84rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.fm-pnl--profit { color: #ef4444; }
+.fm-pnl--loss { color: #22c55e; }
+
+.fm-empty-hint {
   padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
 }
 
-.position-right {
-  text-align: right;
+/* Events */
+.fm-event-list {
+  display: grid;
+  gap: 0;
 }
 
-.pnl--profit {
-  color: #fca5a5;
+.fm-event-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 5px 14px;
+  font-size: 0.76rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 
-.pnl--loss {
-  color: #86efac;
+.fm-event-time {
+  color: rgba(255, 255, 255, 0.3);
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  font-size: 0.68rem;
+  white-space: nowrap;
 }
 
-@media (max-width: 1180px) {
-  .monitor-layout {
+.fm-event-text {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1280px) {
+  .fm-layout {
+    grid-template-columns: 180px minmax(0, 1fr) 280px;
+  }
+}
+
+@media (max-width: 1080px) {
+  .fm-page {
+    height: auto;
+    max-height: none;
+    overflow: auto;
+  }
+
+  .futures-monitor {
+    height: auto;
+  }
+
+  .fm-layout {
     grid-template-columns: 1fr;
+    overflow: visible;
   }
 
-  .watch-panel,
-  .side-panel,
-  .chart-panel {
-    min-height: auto;
+  .fm-watchlist {
+    order: 1;
+    max-height: 200px;
+  }
+
+  .fm-chart-panel {
+    order: 2;
+    min-height: 400px;
+  }
+
+  .fm-sidebar {
+    order: 3;
+    overflow-y: visible;
   }
 }
 
-@media (max-width: 760px) {
-  .futures-hero {
+@media (max-width: 720px) {
+  .fm-config-strip {
+    flex-wrap: wrap;
+  }
+
+  .fm-config-field {
+    min-width: 140px;
+  }
+
+  .fm-topbar {
+    flex-wrap: wrap;
+  }
+
+  .fm-chart-header {
     flex-direction: column;
+    align-items: flex-start;
   }
 
-  .sizing-grid {
-    grid-template-columns: 1fr;
+  .fm-metric-strip {
+    flex-wrap: wrap;
+  }
+
+  .fm-metric-item {
+    min-width: 70px;
+  }
+
+  .fm-ref-strip {
+    flex-wrap: wrap;
+    gap: 6px;
   }
 }
 </style>
