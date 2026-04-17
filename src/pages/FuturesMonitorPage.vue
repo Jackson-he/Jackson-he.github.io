@@ -487,7 +487,6 @@ function currency(value) {
     <div class="page-container futures-monitor">
       <!-- Top bar -->
       <header class="fm-topbar">
-        <RouterLink to="/projects/tools" class="fm-back">← 返回</RouterLink>
         <div class="fm-topbar-brand">
           <span class="fm-brand-label">FUTURES TERMINAL</span>
           <span class="fm-brand-sep">|</span>
