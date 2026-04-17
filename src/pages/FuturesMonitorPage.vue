@@ -4,7 +4,10 @@ import { RouterLink } from 'vue-router'
 
 const API_BASE_STORAGE_KEY = 'futures-monitor-api-base-url'
 const SYMBOL_STORAGE_KEY = 'futures-monitor-selected-symbol'
+const CAPITAL_EQUITY_STORAGE_KEY = 'futures-monitor-manual-capital-equity'
+const CAPITAL_AVAILABLE_STORAGE_KEY = 'futures-monitor-manual-capital-available'
 const DEFAULT_API_BASE = 'http://localhost:3201'
+const EMPTY_QUEUE_MESSAGE = '暂无已发送飞书提醒的合约'
 
 const INTERVAL_OPTIONS = [
   { label: '1分钟', value: '1m' },
@@ -20,8 +23,11 @@ const watchItems = ref([])
 const tradeSymbols = ref([])
 const selectedSymbol = ref(readStoredValue(SYMBOL_STORAGE_KEY, ''))
 const selectedInterval = ref('1h')
+const capitalEquityInput = ref(readStoredValue(CAPITAL_EQUITY_STORAGE_KEY, ''))
+const capitalAvailableInput = ref(readStoredValue(CAPITAL_AVAILABLE_STORAGE_KEY, ''))
 const refreshTimer = ref(null)
 let streamSource = null
+let refreshSequence = 0
 
 const dashboard = reactive({
   loading: false,
@@ -41,11 +47,42 @@ const dashboard = reactive({
     margin: 0,
   },
   signal: {
+    hasSignal: false,
+    name: '',
     side: 'long',
     level: 'standard',
     status: '等待数据',
     reason: '请先启动 monitor.py，并确认前端后端地址配置正确。',
+    fillReference: 0,
+    stopPrice: 0,
+    riskRatio: 0.01,
     updatedAt: '',
+  },
+  instrument: {
+    priceTick: 0,
+    volumeMultiple: 0,
+    marginPerLot: 0,
+    marginSource: 'unknown',
+  },
+  capital: {
+    available: 0,
+    equity: 0,
+    availableSource: 'account',
+    equitySource: 'account',
+    riskRatio: 0.01,
+  },
+  sizing: {
+    hasSignal: false,
+    maxVolume: 0,
+    riskCap: 0,
+    marginCap: 0,
+    perLotRisk: 0,
+    perLotMargin: 0,
+    riskBudget: 0,
+    stopDistance: 0,
+    limitedBy: 'none',
+    reason: '',
+    previewMode: false,
   },
   positions: [],
   events: [],
@@ -124,6 +161,14 @@ const signalBadge = computed(() => {
   const level = dashboard.signal.level === 'standard' ? '🔥 标准' : '✨ 谨慎'
   return `${level} · ${side}`
 })
+const sizingTitle = computed(() => {
+  if (dashboard.sizing.maxVolume > 0) return `当前最多可开 ${dashboard.sizing.maxVolume} 手`
+  return '当前条件下不可开仓'
+})
+const sizingSummary = computed(() => {
+  if (dashboard.sizing.reason) return dashboard.sizing.reason
+  return '已按保证金不超过可支配资金、单笔止损不超过总资金 1% 测算。'
+})
 
 const selectedWatchItem = computed(() => watchItems.value.find((item) => item.symbol === selectedSymbol.value) || null)
 const selectedSymbolLabel = computed(() => selectedWatchItem.value?.displayName || selectedSymbol.value || '--')
@@ -156,6 +201,14 @@ watch(selectedSymbol, (value) => {
 })
 
 watch(selectedInterval, () => {
+  restartLiveFeed()
+})
+
+watch([capitalEquityInput, capitalAvailableInput], ([equity, available]) => {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(CAPITAL_EQUITY_STORAGE_KEY, equity)
+    window.localStorage.setItem(CAPITAL_AVAILABLE_STORAGE_KEY, available)
+  }
   restartLiveFeed()
 })
 
@@ -198,7 +251,8 @@ async function refreshDashboard(options = {}) {
   try {
     await fetchWatchlist()
     if (!selectedSymbol.value) {
-      throw new Error('后端未返回可用观察合约')
+      applyEmptyState(EMPTY_QUEUE_MESSAGE)
+      return
     }
     const payload = await fetchMonitorPayload()
     applyPayload(payload)
@@ -221,26 +275,22 @@ async function fetchWatchlist() {
   const nextWatchItems = Array.isArray(payload.watchItems)
     ? payload.watchItems.filter((item) => item?.symbol)
     : []
-  const nextWatchSymbols = nextWatchItems.length
-    ? nextWatchItems.map((item) => item.symbol)
-    : (Array.isArray(payload.watchSymbols) ? payload.watchSymbols.filter(Boolean) : [])
-  if (!nextWatchSymbols.length) {
-    throw new Error('后端未返回观察合约列表')
-  }
-  watchItems.value = nextWatchItems.length
-    ? nextWatchItems
-    : nextWatchSymbols.map((symbol) => ({ symbol, displayName: symbol, symbolDisplay: symbol, tradeEnabled: false }))
+  const nextWatchSymbols = nextWatchItems.map((item) => item.symbol)
+  watchItems.value = nextWatchItems
   watchSymbols.value = nextWatchSymbols
   tradeSymbols.value = Array.isArray(payload.tradeSymbols) ? payload.tradeSymbols : []
   if (!watchSymbols.value.includes(selectedSymbol.value)) {
-    selectedSymbol.value = watchSymbols.value[0]
+    selectedSymbol.value = watchSymbols.value[0] || ''
   }
 }
 
 function restartLiveFeed() {
+  const runId = ++refreshSequence
   closeStream()
-  refreshDashboard()
-  startStream()
+  refreshDashboard().finally(() => {
+    if (runId !== refreshSequence) return
+    startStream()
+  })
 }
 
 function closeStream() {
@@ -254,7 +304,7 @@ function closeStream() {
 function startStream() {
   if (typeof window === 'undefined' || typeof EventSource === 'undefined') return
   if (!apiUrl.value || !selectedSymbol.value) return
-  const url = `${apiUrl.value}/api/futures/stream?symbol=${encodeURIComponent(selectedSymbol.value)}&interval=${selectedInterval.value}`
+  const url = `${apiUrl.value}/api/futures/stream?${buildMonitorQuery()}`
   streamSource = new EventSource(url)
   streamSource.onopen = () => {
     streamState.connected = true
@@ -281,7 +331,7 @@ async function fetchMonitorPayload() {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 8000)
   try {
-    const response = await fetch(`${base}/api/futures/monitor?symbol=${encodeURIComponent(selectedSymbol.value)}&interval=${selectedInterval.value}`, {
+    const response = await fetch(`${base}/api/futures/monitor?${buildMonitorQuery()}`, {
       signal: controller.signal,
     })
     if (!response.ok) {
@@ -303,7 +353,10 @@ function applyPayload(payload) {
   dashboard.lastUpdatedAt = payload.lastUpdatedAt || new Date().toLocaleString()
   dashboard.bars = payload.bars || []
   dashboard.metrics = { ...dashboard.metrics, ...(payload.metrics || {}) }
+  dashboard.instrument = { ...dashboard.instrument, ...(payload.instrument || {}) }
   dashboard.signal = { ...dashboard.signal, ...(payload.signal || {}) }
+  dashboard.capital = { ...dashboard.capital, ...(payload.capital || {}) }
+  dashboard.sizing = { ...dashboard.sizing, ...(payload.sizing || {}) }
   dashboard.positions = payload.positions || []
   dashboard.events = payload.events || []
 }
@@ -324,16 +377,59 @@ function applyEmptyState(message) {
     margin: 0,
   }
   dashboard.signal = {
+    hasSignal: false,
+    name: '',
     side: 'long',
     level: 'standard',
     status: '等待数据',
     reason: message || '未获取到后端数据',
+    fillReference: 0,
+    stopPrice: 0,
+    riskRatio: 0.01,
     updatedAt: '',
+  }
+  dashboard.instrument = {
+    priceTick: 0,
+    volumeMultiple: 0,
+    marginPerLot: 0,
+    marginSource: 'unknown',
+  }
+  dashboard.capital = {
+    available: 0,
+    equity: 0,
+    availableSource: 'account',
+    equitySource: 'account',
+    riskRatio: 0.01,
+  }
+  dashboard.sizing = {
+    hasSignal: false,
+    maxVolume: 0,
+    riskCap: 0,
+    marginCap: 0,
+    perLotRisk: 0,
+    perLotMargin: 0,
+    riskBudget: 0,
+    stopDistance: 0,
+    limitedBy: 'none',
+    reason: '',
+    previewMode: false,
   }
   dashboard.positions = []
   dashboard.events = [
     { time: new Date().toLocaleTimeString(), text: message || '未获取到后端数据' },
   ]
+}
+
+function buildMonitorQuery() {
+  const params = new URLSearchParams({
+    symbol: selectedSymbol.value,
+    interval: selectedInterval.value,
+  })
+  const equity = `${capitalEquityInput.value || ''}`.trim()
+  const available = `${capitalAvailableInput.value || ''}`.trim()
+  if (equity !== '') params.set('capitalEquity', equity)
+  if (available !== '') params.set('capitalAvailable', available)
+  return params.toString()
 }
 
 function scalePrice(value) {
@@ -376,6 +472,19 @@ function normalizeApiBase(value) {
   return (value || '').trim().replace(/\/+$/, '')
 }
 
+function capitalSourceLabel(source) {
+  return source === 'manual' ? '手动输入' : '账户实时值'
+}
+
+function marginSourceLabel(source) {
+  if (source === 'quote') return 'TqSdk 实时保证金'
+  if (source === 'estimate') return '按估算保证金率'
+  return '待补充'
+}
+
+function lotCountText(value) {
+  return Number.isFinite(value) ? `${Math.max(0, Math.floor(value))} 手` : '--'
+}
 
 function numberCompact(value) {
   if (!Number.isFinite(value)) return '--'
@@ -402,7 +511,7 @@ function currency(value) {
           <p class="eyebrow">Futures Terminal</p>
           <h1 class="hero-title">期货实时监控面板</h1>
           <p class="hero-subtitle">
-            当前先交付前端监控版：支持切换合约、切换周期、实时/演示 K 线、指标叠加和资金信号面板。
+            当前页面按飞书提醒队列展示合约，最新进入队列的提醒会排在最前面，并支持继续查看对应合约的实时数据。
           </p>
         </div>
         <div class="surface-block hero-status">
@@ -418,7 +527,7 @@ function currency(value) {
         <div class="panel-header">
           <div>
             <h2 class="panel-title">连接配置</h2>
-            <p class="panel-subtitle">后续接通 Python 服务后，这里会自动拉取真实 K 线和账户数据。</p>
+            <p class="panel-subtitle">留空时默认使用后端实时账户数据；也可以手动输入资金做开仓测算。</p>
           </div>
         </div>
         <div class="config-grid">
@@ -434,6 +543,30 @@ function currency(value) {
               </option>
             </select>
           </label>
+          <label class="field-group">
+            <span class="field-label">账户总资金</span>
+            <input
+              v-model.lazy="capitalEquityInput"
+              class="input"
+              type="number"
+              min="0"
+              step="1000"
+              placeholder="留空则使用后端账户权益"
+            />
+            <small class="field-hint">用于计算单笔止损上限 = 总资金 × 1%</small>
+          </label>
+          <label class="field-group">
+            <span class="field-label">剩余可支配资金</span>
+            <input
+              v-model.lazy="capitalAvailableInput"
+              class="input"
+              type="number"
+              min="0"
+              step="1000"
+              placeholder="留空则使用后端可用资金"
+            />
+            <small class="field-hint">用于判断保证金最多能支持开几手</small>
+          </label>
         </div>
       </section>
 
@@ -441,24 +574,28 @@ function currency(value) {
         <aside class="panel watch-panel">
           <div class="panel-header">
             <div>
-              <h2 class="panel-title">合约列表</h2>
-              <p class="panel-subtitle">点击切换左侧监控合约。</p>
+              <h2 class="panel-title">提醒队列</h2>
+              <p class="panel-subtitle">仅展示已发送飞书提醒的合约，最新提醒排在最前面。</p>
             </div>
           </div>
           <div class="symbol-list">
-            <button
-              v-for="item in watchItems"
-              :key="item.symbol"
-              class="symbol-item"
-              :class="{ 'symbol-item--active': item.symbol === selectedSymbol }"
-              @click="selectedSymbol = item.symbol"
-            >
-              <span class="symbol-text">
-                <strong>{{ item.displayName || item.symbol }}</strong>
-                <small class="symbol-code">{{ item.symbol }}</small>
-              </span>
-              <small v-if="tradeSymbols.includes(item.symbol)" class="symbol-tag">交易</small>
-            </button>
+            <template v-if="watchItems.length">
+              <button
+                v-for="item in watchItems"
+                :key="item.symbol"
+                class="symbol-item"
+                :class="{ 'symbol-item--active': item.symbol === selectedSymbol }"
+                @click="selectedSymbol = item.symbol"
+              >
+                <span class="symbol-text">
+                  <strong>{{ item.displayName || item.symbol }}</strong>
+                  <small class="symbol-code">{{ item.symbol }}</small>
+                  <small v-if="item.lastAlertAt" class="symbol-meta">提醒于 {{ item.lastAlertAt }}</small>
+                </span>
+                <small v-if="tradeSymbols.includes(item.symbol)" class="symbol-tag">交易</small>
+              </button>
+            </template>
+            <p v-else class="symbol-empty">暂无飞书提醒，合约会在提醒发出后进入队列。</p>
           </div>
         </aside>
 
@@ -591,6 +728,59 @@ function currency(value) {
             <small class="muted-text">更新于 {{ dashboard.signal.updatedAt || '--' }}</small>
           </div>
 
+          <div class="surface-block sizing-card">
+            <div class="field-label">开仓测算</div>
+            <div class="signal-title">{{ sizingTitle }}</div>
+            <p class="muted-text">{{ sizingSummary }}</p>
+            <div class="sizing-grid">
+              <article class="sizing-metric">
+                <span class="muted-text">总资金</span>
+                <strong>{{ currency(dashboard.capital.equity) }}</strong>
+                <small class="muted-text">{{ capitalSourceLabel(dashboard.capital.equitySource) }}</small>
+              </article>
+              <article class="sizing-metric">
+                <span class="muted-text">可支配资金</span>
+                <strong>{{ currency(dashboard.capital.available) }}</strong>
+                <small class="muted-text">{{ capitalSourceLabel(dashboard.capital.availableSource) }}</small>
+              </article>
+              <article class="sizing-metric">
+                <span class="muted-text">交易单位</span>
+                <strong>{{ dashboard.instrument.volumeMultiple || '--' }}</strong>
+                <small class="muted-text">每手合约乘数</small>
+              </article>
+              <article class="sizing-metric">
+                <span class="muted-text">每手保证金</span>
+                <strong>{{ currency(dashboard.sizing.perLotMargin || dashboard.instrument.marginPerLot) }}</strong>
+                <small class="muted-text">{{ marginSourceLabel(dashboard.instrument.marginSource) }}</small>
+              </article>
+              <article class="sizing-metric">
+                <span class="muted-text">单手止损额</span>
+                <strong>{{ currency(dashboard.sizing.perLotRisk) }}</strong>
+                <small class="muted-text">含手续费与滑点</small>
+              </article>
+              <article class="sizing-metric">
+                <span class="muted-text">1% 止损额度</span>
+                <strong>{{ currency(dashboard.sizing.riskBudget) }}</strong>
+                <small class="muted-text">总资金 × 1%</small>
+              </article>
+              <article class="sizing-metric">
+                <span class="muted-text">止损最多</span>
+                <strong>{{ lotCountText(dashboard.sizing.riskCap) }}</strong>
+                <small class="muted-text">按 1% 风险上限</small>
+              </article>
+              <article class="sizing-metric">
+                <span class="muted-text">保证金最多</span>
+                <strong>{{ lotCountText(dashboard.sizing.marginCap) }}</strong>
+                <small class="muted-text">按可支配资金上限</small>
+              </article>
+            </div>
+            <div class="sizing-rule">
+              <div>参考价：{{ dashboard.signal.fillReference > 0 ? dashboard.signal.fillReference.toFixed(2) : '--' }}</div>
+              <div>止损价：{{ dashboard.signal.stopPrice > 0 ? dashboard.signal.stopPrice.toFixed(2) : '--' }}</div>
+              <div>止损距离：{{ dashboard.sizing.stopDistance > 0 ? dashboard.sizing.stopDistance.toFixed(2) : '--' }}</div>
+            </div>
+          </div>
+
           <div class="surface-block">
             <div class="field-label">持仓快照</div>
             <div v-if="dashboard.positions.length" class="position-list">
@@ -672,6 +862,13 @@ function currency(value) {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.field-hint {
+  display: block;
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.5;
+}
+
 .monitor-layout {
   display: grid;
   gap: 20px;
@@ -715,6 +912,11 @@ function currency(value) {
   color: rgba(255, 255, 255, 0.58);
 }
 
+.symbol-meta {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.75rem;
+}
+
 .symbol-item:hover,
 .symbol-item--active {
   transform: translateY(-1px);
@@ -728,6 +930,15 @@ function currency(value) {
   background: rgba(239, 68, 68, 0.2);
   color: #fca5a5;
   font-size: 0.72rem;
+}
+
+.symbol-empty {
+  margin: 0;
+  padding: 18px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.68);
+  line-height: 1.6;
 }
 
 .ticker-box {
@@ -871,10 +1082,37 @@ function currency(value) {
   margin-top: 16px;
 }
 
+.sizing-card {
+  margin-top: 16px;
+}
+
 .signal-title {
   margin: 8px 0 6px;
   font-size: 1.1rem;
   font-weight: 700;
+}
+
+.sizing-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.sizing-metric {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sizing-rule {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.88rem;
 }
 
 .position-item,
@@ -914,6 +1152,10 @@ function currency(value) {
 @media (max-width: 760px) {
   .futures-hero {
     flex-direction: column;
+  }
+
+  .sizing-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
