@@ -201,6 +201,29 @@ const currentPriceClass = computed(() => {
   return 'ticker--flat'
 })
 
+const apiBaseWarning = computed(() => {
+  if (typeof window === 'undefined') return ''
+  if (!apiUrl.value) return '请先填写后端 API 地址。'
+  if (window.location.protocol === 'https:' && apiUrl.value.startsWith('http://')) {
+    return '当前页面走 HTTPS，后端若仍是 HTTP，请求会被浏览器拦截；请改用 HTTPS API 地址。'
+  }
+  return ''
+})
+
+const watchlistDebugUrl = computed(() => (
+  apiUrl.value ? `${apiUrl.value}/api/futures/watchlist` : ''
+))
+
+const monitorDebugUrl = computed(() => (
+  apiUrl.value && selectedSymbol.value
+    ? `${apiUrl.value}/api/futures/monitor?${buildMonitorQuery()}`
+    : ''
+))
+
+const hasConnectionIssue = computed(() => (
+  Boolean(apiBaseWarning.value || dashboard.error || streamState.error)
+))
+
 const sizingSummary = computed(() => {
   if (dashboard.sizing.reason) return dashboard.sizing.reason
   return `已按保证金不超过可支配资金、单笔止损不超过总资金 ${riskRatioPct.value}% 测算。`
@@ -293,6 +316,7 @@ async function refreshDashboard(options = {}) {
     const payload = await fetchMonitorPayload()
     applyPayload(payload)
   } catch (error) {
+    console.log('refreshDashboard error: ', error)
     dashboard.error = error instanceof Error ? error.message : '加载数据失败'
     applyEmptyState(dashboard.error)
   } finally {
@@ -351,6 +375,7 @@ function startStream() {
       const payload = JSON.parse(event.data)
       applyPayload(payload)
     } catch (error) {
+      console.log('startStream-', error)
       streamState.error = error instanceof Error ? error.message : '解析推送失败'
     }
   }
@@ -608,6 +633,21 @@ function currency(value) {
           />
         </label>
       </section>
+
+      <!-- <section class="fm-connection-strip">
+        <span class="fm-connection-pill fm-connection-pill--mono">{{ apiUrl || '未配置 API Base URL' }}</span>
+        <span class="fm-connection-pill" :class="hasConnectionIssue ? 'fm-connection-pill--danger' : 'fm-connection-pill--ok'">
+          {{ hasConnectionIssue ? '连接异常' : '连接正常' }}
+        </span>
+        <span v-if="apiBaseWarning" class="fm-connection-pill fm-connection-pill--warn">{{ apiBaseWarning }}</span>
+      </section>
+
+      <section v-if="hasConnectionIssue" class="fm-diagnostic-panel">
+        <p v-if="dashboard.error" class="fm-diagnostic-line"><strong>轮询接口</strong>{{ dashboard.error }}</p>
+        <p v-if="streamState.error" class="fm-diagnostic-line"><strong>SSE 推送</strong>{{ streamState.error }}</p>
+        <p v-if="watchlistDebugUrl" class="fm-diagnostic-line"><strong>先测这个</strong>{{ watchlistDebugUrl }}</p>
+        <p v-if="monitorDebugUrl" class="fm-diagnostic-line"><strong>再测这个</strong>{{ monitorDebugUrl }}</p>
+      </section> -->
 
       <!-- Main 3-column layout -->
       <section class="fm-layout">
@@ -1140,6 +1180,73 @@ function currency(value) {
 .fm-config-select option {
   color: #0f172a;
   background: #fff;
+}
+
+.fm-connection-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.fm-connection-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.55);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.74rem;
+}
+
+.fm-connection-pill--mono {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+.fm-connection-pill--ok {
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(20, 83, 45, 0.24);
+}
+
+.fm-connection-pill--danger {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(127, 29, 29, 0.26);
+}
+
+.fm-connection-pill--warn {
+  color: #fcd34d;
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(120, 53, 15, 0.26);
+}
+
+.fm-diagnostic-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.24);
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.fm-diagnostic-line {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.fm-diagnostic-line strong {
+  display: inline-block;
+  min-width: 72px;
+  margin-right: 8px;
+  color: #f8fafc;
 }
 
 /* ---------- 3-Column Layout ---------- */
