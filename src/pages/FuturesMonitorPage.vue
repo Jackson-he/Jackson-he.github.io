@@ -6,6 +6,7 @@ const API_BASE_STORAGE_KEY = 'futures-monitor-api-base-url'
 const SYMBOL_STORAGE_KEY = 'futures-monitor-selected-symbol'
 const CAPITAL_EQUITY_STORAGE_KEY = 'futures-monitor-manual-capital-equity'
 const CAPITAL_AVAILABLE_STORAGE_KEY = 'futures-monitor-manual-capital-available'
+const RISK_RATIO_STORAGE_KEY = 'futures-monitor-risk-ratio'
 const DEFAULT_API_BASE = 'http://localhost:3201'
 const EMPTY_QUEUE_MESSAGE = '暂无已发送飞书提醒的合约'
 
@@ -25,6 +26,8 @@ const selectedSymbol = ref(readStoredValue(SYMBOL_STORAGE_KEY, ''))
 const selectedInterval = ref('1h')
 const capitalEquityInput = ref(readStoredValue(CAPITAL_EQUITY_STORAGE_KEY, ''))
 const capitalAvailableInput = ref(readStoredValue(CAPITAL_AVAILABLE_STORAGE_KEY, ''))
+const riskRatioInput = ref(readStoredValue(RISK_RATIO_STORAGE_KEY, '1'))
+const symbolFilter = ref('')
 const refreshTimer = ref(null)
 let streamSource = null
 let refreshSequence = 0
@@ -98,7 +101,7 @@ const chartState = reactive({
   height: 420,
 })
 
-const chartPadding = { top: 24, right: 24, bottom: 28, left: 64 }
+const chartPadding = { top: 24, right: 68, bottom: 28, left: 64 }
 
 const klineRange = computed(() => {
   const values = dashboard.bars.flatMap((bar) => [bar.high, bar.low, bar.ma6, bar.madkx]).filter((value) => Number.isFinite(value))
@@ -150,6 +153,48 @@ const priceAxisMarks = computed(() => {
   })
 })
 
+const fillReferenceY = computed(() => {
+  const price = dashboard.signal.fillReference
+  if (!price || !Number.isFinite(price) || price <= 0) return null
+  const { min, max } = klineRange.value
+  if (price < min || price > max) return null
+  return scalePrice(price)
+})
+
+const stopPriceY = computed(() => {
+  const price = dashboard.signal.stopPrice
+  if (!price || !Number.isFinite(price) || price <= 0) return null
+  const { min, max } = klineRange.value
+  if (price < min || price > max) return null
+  return scalePrice(price)
+})
+
+const riskRatioPct = computed(() => {
+  const v = parseFloat(riskRatioInput.value)
+  return Number.isFinite(v) && v > 0 ? v : 1
+})
+
+const effectiveRiskBudget = computed(() => {
+  const equity = dashboard.capital.equity
+  if (!equity || equity <= 0) return 0
+  return equity * (riskRatioPct.value / 100)
+})
+
+const effectiveRiskCap = computed(() => {
+  const perLotRisk = dashboard.sizing.perLotRisk
+  if (!perLotRisk || perLotRisk <= 0) return 0
+  return Math.floor(effectiveRiskBudget.value / perLotRisk)
+})
+
+const effectiveMaxVolume = computed(() => {
+  const marginCap = dashboard.sizing.marginCap
+  const riskCap = effectiveRiskCap.value
+  if (riskCap <= 0 && (!Number.isFinite(marginCap) || marginCap <= 0)) return 0
+  if (riskCap <= 0) return Math.floor(marginCap)
+  if (!Number.isFinite(marginCap) || marginCap <= 0) return riskCap
+  return Math.min(riskCap, Math.floor(marginCap))
+})
+
 const currentPriceClass = computed(() => {
   if (dashboard.metrics.changePct > 0) return 'ticker--up'
   if (dashboard.metrics.changePct < 0) return 'ticker--down'
@@ -158,12 +203,21 @@ const currentPriceClass = computed(() => {
 
 const sizingSummary = computed(() => {
   if (dashboard.sizing.reason) return dashboard.sizing.reason
-  return '已按保证金不超过可支配资金、单笔止损不超过总资金 1% 测算。'
+  return `已按保证金不超过可支配资金、单笔止损不超过总资金 ${riskRatioPct.value}% 测算。`
 })
 
 const selectedWatchItem = computed(() => watchItems.value.find((item) => item.symbol === selectedSymbol.value) || null)
 const selectedSymbolLabel = computed(() => selectedWatchItem.value?.displayName || selectedSymbol.value || '--')
 const selectedSymbolDisplay = computed(() => selectedWatchItem.value?.symbolDisplay || selectedSymbolLabel.value)
+
+const filteredWatchItems = computed(() => {
+  const q = symbolFilter.value.trim().toLowerCase()
+  if (!q) return watchItems.value
+  return watchItems.value.filter((item) =>
+    item.symbol.toLowerCase().includes(q) ||
+    (item.displayName || '').toLowerCase().includes(q),
+  )
+})
 
 watch(apiUrlInput, (value) => {
   apiUrl.value = normalizeApiBase(value)
@@ -184,10 +238,11 @@ watch(selectedInterval, () => {
   restartLiveFeed()
 })
 
-watch([capitalEquityInput, capitalAvailableInput], ([equity, available]) => {
+watch([capitalEquityInput, capitalAvailableInput, riskRatioInput], ([equity, available, ratio]) => {
   if (typeof window !== 'undefined') {
     window.localStorage.setItem(CAPITAL_EQUITY_STORAGE_KEY, equity)
     window.localStorage.setItem(CAPITAL_AVAILABLE_STORAGE_KEY, available)
+    window.localStorage.setItem(RISK_RATIO_STORAGE_KEY, ratio)
   }
   restartLiveFeed()
 })
@@ -410,6 +465,8 @@ function buildMonitorQuery() {
   const available = `${capitalAvailableInput.value || ''}`.trim()
   if (equity !== '') params.set('capitalEquity', equity)
   if (available !== '') params.set('capitalAvailable', available)
+  const ratio = `${riskRatioInput.value || ''}`.trim()
+  if (ratio !== '' && ratio !== '1') params.set('riskRatio', String(parseFloat(ratio) / 100))
   return params.toString()
 }
 
@@ -429,11 +486,11 @@ function buildLinePath(bars, key) {
 function buildMarkerPath(bar) {
   const centerX = bar.x + bar.candleWidth / 2
   if (bar.signalMarker.side === 'long') {
-    const y = bar.lowY + 6
-    return `M ${centerX} ${y} L ${centerX - 10} ${y + 16} L ${centerX + 10} ${y + 16} Z`
+    const y = bar.lowY + 4
+    return `M ${centerX} ${y} L ${centerX - 6} ${y + 10} L ${centerX + 6} ${y + 10} Z`
   }
-  const y = bar.highY - 6
-  return `M ${centerX} ${y} L ${centerX - 10} ${y - 16} L ${centerX + 10} ${y - 16} Z`
+  const y = bar.highY - 4
+  return `M ${centerX} ${y} L ${centerX - 6} ${y - 10} L ${centerX + 6} ${y - 10} Z`
 }
 
 function markerLabel(marker) {
@@ -538,6 +595,18 @@ function currency(value) {
             placeholder="后端可用"
           />
         </label>
+        <label class="fm-config-field fm-config-field--narrow">
+          <span class="fm-config-label">风控%</span>
+          <input
+            v-model.lazy="riskRatioInput"
+            class="fm-config-input"
+            type="number"
+            min="0.1"
+            max="10"
+            step="0.5"
+            placeholder="1"
+          />
+        </label>
       </section>
 
       <!-- Main 3-column layout -->
@@ -548,10 +617,17 @@ function currency(value) {
             <h2 class="fm-panel-title">提醒队列</h2>
             <span class="fm-panel-badge">{{ watchItems.length }}</span>
           </div>
+          <div class="fm-search-box">
+            <input
+              v-model="symbolFilter"
+              class="fm-search-input"
+              placeholder="搜索合约..."
+            />
+          </div>
           <div class="fm-symbol-list">
-            <template v-if="watchItems.length">
+            <template v-if="filteredWatchItems.length">
               <button
-                v-for="item in watchItems"
+                v-for="item in filteredWatchItems"
                 :key="item.symbol"
                 class="fm-symbol-item"
                 :class="{ 'fm-symbol-item--active': item.symbol === selectedSymbol }"
@@ -565,6 +641,7 @@ function currency(value) {
                 <small v-if="tradeSymbols.includes(item.symbol)" class="fm-symbol-tag">TRADE</small>
               </button>
             </template>
+            <p v-else-if="watchItems.length" class="fm-symbol-empty">无匹配结果</p>
             <p v-else class="fm-symbol-empty">暂无飞书提醒，合约会在提醒发出后进入队列。</p>
           </div>
         </aside>
@@ -669,12 +746,65 @@ function currency(value) {
                 />
               </g>
 
+              <!-- Fill reference price line -->
+              <g v-if="fillReferenceY != null">
+                <line
+                  :x1="chartPadding.left"
+                  :x2="chartState.width - chartPadding.right"
+                  :y1="fillReferenceY"
+                  :y2="fillReferenceY"
+                  class="fm-ref-line fm-ref-line--fill"
+                />
+                <rect
+                  :x="chartState.width - chartPadding.right + 2"
+                  :y="fillReferenceY - 9"
+                  :width="58"
+                  height="18"
+                  rx="3"
+                  class="fm-ref-tag fm-ref-tag--fill"
+                />
+                <text
+                  :x="chartState.width - chartPadding.right + 6"
+                  :y="fillReferenceY + 4"
+                  class="fm-ref-tag-text"
+                >
+                  参考 {{ dashboard.signal.fillReference.toFixed(1) }}
+                </text>
+              </g>
+
+              <!-- Stop price line -->
+              <g v-if="stopPriceY != null">
+                <line
+                  :x1="chartPadding.left"
+                  :x2="chartState.width - chartPadding.right"
+                  :y1="stopPriceY"
+                  :y2="stopPriceY"
+                  class="fm-ref-line fm-ref-line--stop"
+                />
+                <rect
+                  :x="chartState.width - chartPadding.right + 2"
+                  :y="stopPriceY - 9"
+                  :width="58"
+                  height="18"
+                  rx="3"
+                  class="fm-ref-tag fm-ref-tag--stop"
+                />
+                <text
+                  :x="chartState.width - chartPadding.right + 6"
+                  :y="stopPriceY + 4"
+                  class="fm-ref-tag-text"
+                >
+                  止损 {{ dashboard.signal.stopPrice.toFixed(1) }}
+                </text>
+              </g>
+
+              <!-- Signal markers -->
               <g v-for="bar in signalMarkers" :key="`signal-${bar.time}`">
                 <line
                   :x1="bar.x + bar.candleWidth / 2"
                   :x2="bar.x + bar.candleWidth / 2"
-                  :y1="bar.signalMarker.side === 'long' ? bar.lowY + 6 : bar.highY - 6"
-                  :y2="bar.signalMarker.side === 'long' ? bar.lowY + 42 : bar.highY - 42"
+                  :y1="bar.signalMarker.side === 'long' ? bar.lowY + 4 : bar.highY - 4"
+                  :y2="bar.signalMarker.side === 'long' ? bar.lowY + 24 : bar.highY - 24"
                   :class="bar.signalMarker.side === 'long' ? 'fm-sig-pole fm-sig-pole--long' : 'fm-sig-pole fm-sig-pole--short'"
                 />
                 <path
@@ -683,7 +813,7 @@ function currency(value) {
                 />
                 <text
                   :x="bar.x + bar.candleWidth / 2"
-                  :y="bar.signalMarker.side === 'long' ? bar.lowY + 56 : bar.highY - 50"
+                  :y="bar.signalMarker.side === 'long' ? bar.lowY + 36 : bar.highY - 32"
                   text-anchor="middle"
                   class="fm-sig-label"
                 >
@@ -698,10 +828,22 @@ function currency(value) {
             <span class="fm-legend-item"><i class="fm-legend-dot fm-legend-dot--purple"></i>MADKX</span>
             <span class="fm-legend-item"><i class="fm-legend-dot fm-legend-dot--red"></i>阳线 / 多头</span>
             <span class="fm-legend-item"><i class="fm-legend-dot fm-legend-dot--green"></i>阴线 / 空头</span>
+            <span v-if="fillReferenceY != null" class="fm-legend-item"><i class="fm-legend-line fm-legend-line--fill"></i>参考价</span>
+            <span v-if="stopPriceY != null" class="fm-legend-item"><i class="fm-legend-line fm-legend-line--stop"></i>止损价</span>
           </div>
 
           <!-- Signal reason -->
-          <div v-if="dashboard.signal.reason" class="fm-signal-reason">
+          <div
+            v-if="dashboard.signal.reason"
+            class="fm-signal-reason"
+            :class="{
+              'fm-signal-reason--long': dashboard.signal.hasSignal && dashboard.signal.side === 'long',
+              'fm-signal-reason--short': dashboard.signal.hasSignal && dashboard.signal.side === 'short',
+            }"
+          >
+            <span v-if="dashboard.signal.hasSignal" class="fm-signal-reason-icon">
+              {{ dashboard.signal.side === 'long' ? '▲' : '▼' }}
+            </span>
             {{ dashboard.signal.reason }}
           </div>
         </section>
@@ -727,8 +869,8 @@ function currency(value) {
           <div class="fm-sidebar-section">
             <div class="fm-panel-head">
               <h2 class="fm-panel-title">开仓测算</h2>
-              <span class="fm-sizing-result" :class="dashboard.sizing.maxVolume > 0 ? 'fm-sizing-result--ok' : 'fm-sizing-result--zero'">
-                {{ dashboard.sizing.maxVolume > 0 ? `${dashboard.sizing.maxVolume} 手` : '不可开' }}
+              <span class="fm-sizing-result" :class="effectiveMaxVolume > 0 ? 'fm-sizing-result--ok' : 'fm-sizing-result--zero'">
+                {{ effectiveMaxVolume > 0 ? `${effectiveMaxVolume} 手` : '不可开' }}
               </span>
             </div>
             <p class="fm-dim-text fm-sizing-note">{{ sizingSummary }}</p>
@@ -757,12 +899,12 @@ function currency(value) {
                 <span class="fm-data-value">{{ currency(dashboard.sizing.perLotRisk) }}</span>
               </div>
               <div class="fm-data-cell">
-                <span class="fm-data-label">1%额度</span>
-                <span class="fm-data-value">{{ currency(dashboard.sizing.riskBudget) }}</span>
+                <span class="fm-data-label">{{ riskRatioPct }}%额度</span>
+                <span class="fm-data-value">{{ currency(effectiveRiskBudget) }}</span>
               </div>
               <div class="fm-data-cell">
                 <span class="fm-data-label">止损上限</span>
-                <span class="fm-data-value fm-data-value--accent">{{ lotCountText(dashboard.sizing.riskCap) }}</span>
+                <span class="fm-data-value fm-data-value--accent">{{ lotCountText(effectiveRiskCap) }}</span>
               </div>
               <div class="fm-data-cell">
                 <span class="fm-data-label">保证金上限</span>
@@ -1052,6 +1194,31 @@ function currency(value) {
   min-height: 0;
 }
 
+.fm-search-box {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.fm-search-input {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+  font-size: 0.78rem;
+}
+
+.fm-search-input:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.fm-search-input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
 .fm-symbol-list {
   display: grid;
   gap: 1px;
@@ -1281,18 +1448,73 @@ function currency(value) {
 .fm-wick--up, .fm-candle--up { stroke: #ef4444; fill: #ef4444; }
 .fm-wick--down, .fm-candle--down { stroke: #22c55e; fill: #22c55e; }
 
-.fm-sig-pole { stroke-width: 2; opacity: 0.75; }
+.fm-sig-pole { stroke-width: 1.2; opacity: 0.6; }
 .fm-sig-pole--long { stroke: #ef4444; }
 .fm-sig-pole--short { stroke: #22c55e; }
 
-.fm-sig-marker { opacity: 0.9; }
-.fm-sig-marker--long { fill: #ef4444; }
-.fm-sig-marker--short { fill: #22c55e; }
+.fm-sig-marker { opacity: 0.8; }
 
 .fm-sig-label {
-  fill: rgba(255, 255, 255, 0.85);
-  font-size: 10px;
-  font-weight: 700;
+  fill: rgba(255, 255, 255, 0.65);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+/* Reference price lines */
+.fm-ref-line {
+  stroke-width: 1;
+  stroke-dasharray: 6 4;
+}
+
+.fm-ref-line--fill {
+  stroke: #60a5fa;
+  opacity: 0.7;
+}
+
+.fm-ref-line--stop {
+  stroke: #f97316;
+  opacity: 0.7;
+}
+
+.fm-ref-tag {
+  opacity: 0.85;
+}
+
+.fm-ref-tag--fill {
+  fill: rgba(96, 165, 250, 0.2);
+  stroke: rgba(96, 165, 250, 0.4);
+  stroke-width: 1;
+}
+
+.fm-ref-tag--stop {
+  fill: rgba(249, 115, 22, 0.2);
+  stroke: rgba(249, 115, 22, 0.4);
+  stroke-width: 1;
+}
+
+.fm-ref-tag-text {
+  fill: rgba(255, 255, 255, 0.8);
+  font-size: 9px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+/* Signal marker glow & pulse */
+.fm-sig-marker--long {
+  fill: #ef4444;
+  filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.35));
+  animation: fm-pulse 2s ease-in-out infinite;
+}
+
+.fm-sig-marker--short {
+  fill: #22c55e;
+  filter: drop-shadow(0 0 2px rgba(34, 197, 94, 0.35));
+  animation: fm-pulse 2s ease-in-out infinite;
+}
+
+@keyframes fm-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
 }
 
 /* Legend */
@@ -1323,12 +1545,49 @@ function currency(value) {
 .fm-legend-dot--red { background: #ef4444; }
 .fm-legend-dot--green { background: #22c55e; }
 
+.fm-legend-line {
+  width: 14px;
+  height: 0;
+  border-top: 2px dashed;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.fm-legend-line--fill {
+  border-color: #60a5fa;
+}
+
+.fm-legend-line--stop {
+  border-color: #f97316;
+}
+
 .fm-signal-reason {
-  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.76rem;
-  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  flex-shrink: 0;
+  transition: background 0.2s, color 0.2s;
+}
+
+.fm-signal-reason--long {
+  background: rgba(239, 68, 68, 0.08);
+  border-top-color: rgba(239, 68, 68, 0.15);
+  color: rgba(248, 113, 113, 0.9);
+}
+
+.fm-signal-reason--short {
+  background: rgba(34, 197, 94, 0.08);
+  border-top-color: rgba(34, 197, 94, 0.15);
+  color: rgba(74, 222, 128, 0.9);
+}
+
+.fm-signal-reason-icon {
+  font-size: 0.72rem;
   flex-shrink: 0;
 }
 
