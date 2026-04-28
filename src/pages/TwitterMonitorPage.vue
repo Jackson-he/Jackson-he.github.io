@@ -5,14 +5,18 @@ import { RouterLink } from 'vue-router'
 const STORAGE_KEYS = {
   apiBase: 'twitter-monitor-console-api-base-url',
   apiKey: 'twitter-monitor-console-api-key',
+  apiPrefix: 'twitter-monitor-console-api-prefix',
 }
 
 const DEFAULT_API_BASE = 'http://localhost:3310'
+const DEFAULT_API_PREFIX = '/api/twitter'
 const VISIBLE_REFRESH_INTERVAL_MS = 30000
 const HIDDEN_REFRESH_INTERVAL_MS = 90000
 
 const apiBaseInput = ref(readStoredValue(STORAGE_KEYS.apiBase, DEFAULT_API_BASE))
 const apiBase = ref(normalizeApiBase(apiBaseInput.value))
+const apiPrefixInput = ref(readStoredValue(STORAGE_KEYS.apiPrefix, DEFAULT_API_PREFIX))
+const apiPrefix = ref(normalizeApiPrefix(apiPrefixInput.value))
 const apiKeyInput = ref(readStoredValue(STORAGE_KEYS.apiKey, ''))
 const apiKey = ref(apiKeyInput.value.trim())
 const refreshTimer = ref(null)
@@ -114,6 +118,7 @@ const healthSummary = computed(() => {
   const bits = [
     dashboard.health.service || 'twitter-monitor',
     dashboard.health.provider || 'provider',
+    dashboard.health.apiPrefix || apiPrefix.value,
     dashboard.health.providerConfigured ? 'provider ready' : 'provider missing',
     dashboard.health.defaultWebhookConfigured ? 'webhook ready' : 'webhook missing',
   ]
@@ -134,7 +139,11 @@ const apiBaseWarning = computed(() => {
 })
 
 const hasPendingConnectionChanges = computed(() => {
-  return normalizeApiBase(apiBaseInput.value) !== apiBase.value || apiKeyInput.value.trim() !== apiKey.value
+  return (
+    normalizeApiBase(apiBaseInput.value) !== apiBase.value ||
+    normalizeApiPrefix(apiPrefixInput.value) !== apiPrefix.value ||
+    apiKeyInput.value.trim() !== apiKey.value
+  )
 })
 
 const tabCounts = computed(() => ({
@@ -146,6 +155,10 @@ const tabCounts = computed(() => ({
 
 watch(apiBaseInput, (value) => {
   saveStorage(STORAGE_KEYS.apiBase, value)
+})
+
+watch(apiPrefixInput, (value) => {
+  saveStorage(STORAGE_KEYS.apiPrefix, value)
 })
 
 watch(apiKeyInput, (value) => {
@@ -180,6 +193,31 @@ function normalizeApiBase(value) {
   return String(value || '').trim().replace(/\/+$/, '')
 }
 
+function normalizeApiPrefix(value) {
+  const trimmed = String(value || '').trim()
+  const candidate = trimmed || DEFAULT_API_PREFIX
+  const withLeadingSlash = candidate.startsWith('/') ? candidate : `/${candidate}`
+  const normalized = withLeadingSlash.replace(/\/+$/, '')
+  return normalized || DEFAULT_API_PREFIX
+}
+
+function normalizeApiPath(path) {
+  const input = String(path || '').trim()
+  if (!input) {
+    return '/'
+  }
+
+  if (input === '/api') {
+    return ''
+  }
+
+  if (input.startsWith('/api/')) {
+    return input.slice(4)
+  }
+
+  return input.startsWith('/') ? input : `/${input}`
+}
+
 function clearRefreshTimer() {
   if (refreshTimer.value && typeof window !== 'undefined') {
     window.clearTimeout(refreshTimer.value)
@@ -212,6 +250,7 @@ async function apiCall(path, options = {}) {
   if (!base) {
     throw new Error('请先填写 twitter-monitor API Base URL')
   }
+  const finalPath = `${apiPrefix.value}${normalizeApiPath(path)}`
 
   const headers = {
     'Content-Type': 'application/json',
@@ -222,7 +261,7 @@ async function apiCall(path, options = {}) {
     headers['x-api-key'] = apiKey.value
   }
 
-  const response = await fetch(`${base}${path}`, {
+  const response = await fetch(`${base}${finalPath}`, {
     ...options,
     headers,
   })
@@ -310,6 +349,7 @@ async function applyConnectionSettings() {
 
   try {
     apiBase.value = normalizeApiBase(apiBaseInput.value)
+    apiPrefix.value = normalizeApiPrefix(apiPrefixInput.value)
     apiKey.value = apiKeyInput.value.trim()
     await refreshDashboard()
     dashboard.statusMessage = '后端连接配置已应用。'
@@ -1072,10 +1112,15 @@ function avatarLetter(text) {
             <input v-model="apiBaseInput" class="x-input" placeholder="http://localhost:3310" spellcheck="false" />
           </label>
           <label class="x-field">
+            <span class="x-field-label">API Prefix</span>
+            <input v-model="apiPrefixInput" class="x-input" placeholder="/api 或 /api/twitter" spellcheck="false" />
+          </label>
+          <label class="x-field">
             <span class="x-field-label">x-api-key</span>
             <input v-model="apiKeyInput" class="x-input" placeholder="ADMIN_API_KEY" spellcheck="false" />
           </label>
           <p class="x-aside-meta">当前 · {{ apiBase || '未设置' }}</p>
+          <p class="x-aside-meta">前缀 · {{ apiPrefix }}</p>
           <p v-if="hasPendingConnectionChanges" class="x-aside-meta x-aside-meta--accent">
             输入框已修改，点下方按钮才会启用。
           </p>
@@ -1096,7 +1141,7 @@ function avatarLetter(text) {
           <ul class="x-aside-hints">
             <li><strong>跨域</strong> · 后端默认允许 *，可改 `CORS_ALLOW_ORIGIN`。</li>
             <li><strong>账号监控</strong> · 默认走 `advanced_search from:&lt;username&gt;`。</li>
-            <li><strong>部署</strong> · 部署到 GitHub Pages 后改 API Base 即可。</li>
+            <li><strong>路径前缀</strong> · 远端如果走 Nginx 分流，把后端 `API_PREFIX` 和这里的 `API Prefix` 设成同一个值，例如 `/api/twitter`。</li>
           </ul>
         </section>
 
