@@ -8,6 +8,7 @@ import SportPredictionPage from '@/pages/SportPredictionPage.vue'
 import ToolsPage from '@/pages/ToolsPage.vue'
 import StockTransitionPage from '@/pages/StockTransitionPage.vue'
 import FuturesMonitorPage from '@/pages/FuturesMonitorPage.vue'
+import TwitterMonitorPage from '@/pages/TwitterMonitorPage.vue'
 import CodexChatPage from '@/pages/CodexChatPage.vue'
 import ItalyTripMapPage from '@/pages/ItalyTripMapPage.vue'
 import ItalyTravelCompanionPage from '@/pages/ItalyTravelCompanionPage.vue'
@@ -116,12 +117,22 @@ const routes = [
     },
   },
   {
+    path: '/projects/twitter-monitor',
+    name: 'twitter-monitor',
+    component: TwitterMonitorPage,
+    meta: {
+      title: 'Twitter Monitor Console',
+      description: '连接 twitter-monitor 独立后端的推文监控工作台，支持目标管理、规则配置、同步和命中查看。',
+      sharePath: '/projects/twitter-monitor/',
+    },
+  },
+  {
     path: '/projects/tools',
     name: 'tools',
     component: ToolsPage,
     meta: {
       title: '工具应用',
-      description: '集中展示可独立部署的小工具页，包含股票趋势、期货监控、行程地图和 Codex Chat。',
+      description: '集中展示可独立部署的小工具页，包含股票趋势、期货监控、推文监控、行程地图和 Codex Chat。',
       sharePath: '/projects/tools/',
     },
   },

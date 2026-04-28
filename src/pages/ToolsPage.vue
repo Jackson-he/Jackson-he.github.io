@@ -20,6 +20,12 @@ const toolProjects = [
     to: '/projects/futures-monitor',
   },
   {
+    icon: '🛰️',
+    title: 'Twitter Monitor',
+    description: '连接 twitter-monitor 后端的推文监控工作台，可在浏览器里配置目标、规则和同步动作。',
+    to: '/projects/twitter-monitor',
+  },
+  {
     icon: '🗺️',
     title: 'Italy Trip Map',
     description: '把意大利婚纱照行程可视化到高德地图里，支持点位筛选、路线查看和每日节奏概览。',
