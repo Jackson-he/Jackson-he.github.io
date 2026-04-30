@@ -43,6 +43,14 @@ const projects = [
     size: 'wide',
   },
   {
+    icon: '🛰️',
+    title: 'Twitter Monitor',
+    description: '和 twitter-monitor 独立后端搭配的监控控制台，用浏览器管理目标、规则、同步和命中。',
+    to: '/projects/twitter-monitor',
+    gradient: 'linear-gradient(135deg, #0f766e 0%, #22c55e 100%)',
+    size: 'normal',
+  },
+  {
     icon: '🇮🇹',
     title: '意大利出行工具',
     description: '个人旅行工作台，集中处理 Today、地图、票据、交通规则和全程总览。',

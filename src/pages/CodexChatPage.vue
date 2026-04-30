@@ -50,12 +50,15 @@ const sandboxMode = ref(loadStorage(STORAGE_KEYS.sandboxMode, 'workspace-write')
 const approvalPolicy = ref(loadStorage(STORAGE_KEYS.approvalPolicy, 'on-request'))
 const networkAccessEnabled = ref(loadStorage(STORAGE_KEYS.networkAccessEnabled, false))
 const activeConversationId = ref(loadStorage(STORAGE_KEYS.activeConversationId, ''))
+const sharedConversationId = ref(readSharedConversationIdFromUrl())
 
 const conversations = ref([])
 const activeConversation = ref(null)
+const sharedConversation = ref(null)
 const serviceStatus = ref(null)
 const loadingList = ref(false)
 const loadingConversation = ref(false)
+const loadingSharedConversation = ref(false)
 const creatingConversation = ref(false)
 const deletingConversation = ref(false)
 const errorMessage = ref('')
@@ -74,21 +77,42 @@ const editingMessageContent = ref('')
 const pendingConversationIds = ref([])
 const streamingAssistantIds = ref({})
 const showSettings = ref(false)
+const showShareDialog = ref(false)
+const shareCreating = ref(false)
+const shareCopied = ref(false)
+const shareUrl = ref('')
 const isDarkMode = ref(loadStorage('codex-dark-mode', true))
 
 const normalizedApiBase = computed(() => apiBase.value.replace(/\/+$/, ''))
-const activeMessages = computed(() => activeConversation.value?.messages || [])
+const isSharedConversation = computed(() => Boolean(sharedConversationId.value))
+const displayConversation = computed(() => (isSharedConversation.value ? sharedConversation.value : activeConversation.value))
+const activeMessages = computed(() => displayConversation.value?.messages || [])
 const activeWorkingDirectory = computed(() => activeConversation.value?.workingDirectory || workingDirectory.value || '.')
 const isDesktop = computed(() => viewportWidth.value >= MOBILE_BREAKPOINT)
-const shouldShowDrawer = computed(() => isDesktop.value || isDrawerOpen.value)
-const shouldShowDrawerOverlay = computed(() => !isDesktop.value && isDrawerOpen.value)
+const shouldShowDrawer = computed(() => !isSharedConversation.value && (isDesktop.value || isDrawerOpen.value))
+const shouldShowDrawerOverlay = computed(() => !isSharedConversation.value && !isDesktop.value && isDrawerOpen.value)
 const hasMessages = computed(() => activeMessages.value.length > 0)
 const serviceStateText = computed(() => (serviceStatus.value?.ok ? '服务在线' : '等待连接'))
 const serviceStateClass = computed(() => (serviceStatus.value?.ok ? 'is-online' : 'is-offline'))
 const activeConversationPending = computed(() =>
-  activeConversationId.value ? pendingConversationIds.value.includes(activeConversationId.value) : false,
+  !isSharedConversation.value && activeConversationId.value
+    ? pendingConversationIds.value.includes(activeConversationId.value)
+    : false,
 )
-const selectedModelLabel = computed(() => model.value || serviceStatus.value?.defaults?.model || '服务默认')
+const canShareConversation = computed(() =>
+  Boolean(
+    !isSharedConversation.value &&
+      activeConversationId.value &&
+      activeConversation.value?.messages?.length &&
+      !activeConversationPending.value &&
+      !shareCreating.value,
+  ),
+)
+const selectedModelLabel = computed(() =>
+  isSharedConversation.value
+    ? displayConversation.value?.model || '分享对话'
+    : model.value || serviceStatus.value?.defaults?.model || '服务默认',
+)
 const availableModelOptions = computed(() => {
   const options = []
   const seen = new Set()
@@ -163,6 +187,14 @@ watch(shouldShowDrawerOverlay, (isOpen) => {
 onMounted(async () => {
   updateViewportWidth()
   window.addEventListener('resize', updateViewportWidth)
+
+  if (sharedConversationId.value) {
+    await loadSharedConversation(sharedConversationId.value)
+    await nextTick()
+    updateScrollIndicators()
+    return
+  }
+
   await refreshHealth()
   await refreshConversations()
   await nextTick()
@@ -215,6 +247,29 @@ async function refreshConversations() {
     errorMessage.value = error.message
   } finally {
     loadingList.value = false
+  }
+}
+
+async function loadSharedConversation(id) {
+  const shareId = compactText(id)
+  if (!shareId) {
+    errorMessage.value = '分享链接缺少会话标识'
+    return
+  }
+
+  loadingSharedConversation.value = true
+  sharedConversationId.value = shareId
+
+  try {
+    const data = await apiCall(`/api/codex/shared-conversations/${encodeURIComponent(shareId)}`)
+    sharedConversation.value = normalizeSharedConversation(data.conversation || data.share?.conversation, data.share)
+    statusMessage.value = '正在查看分享的只读对话'
+    errorMessage.value = ''
+  } catch (error) {
+    sharedConversation.value = null
+    errorMessage.value = error.message
+  } finally {
+    loadingSharedConversation.value = false
   }
 }
 
@@ -300,7 +355,89 @@ async function deleteConversation(id) {
   }
 }
 
+async function shareCurrentConversation() {
+  if (!canShareConversation.value) {
+    return
+  }
+
+  shareCreating.value = true
+  shareCopied.value = false
+
+  try {
+    const data = await apiCall(`/api/codex/conversations/${activeConversationId.value}/share`, {
+      method: 'POST',
+      body: JSON.stringify(buildConversationPayload()),
+    })
+    const shareId = data.share?.id
+
+    if (!shareId) {
+      throw new Error('分享链接生成失败')
+    }
+
+    shareUrl.value = buildSharedConversationUrl(shareId)
+    showShareDialog.value = true
+    const copied = await copyShareUrl({ silent: true })
+    statusMessage.value = copied ? '分享链接已复制' : '分享链接已生成'
+    errorMessage.value = ''
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    shareCreating.value = false
+  }
+}
+
+async function copyShareUrl(options = {}) {
+  if (!shareUrl.value) {
+    return false
+  }
+
+  try {
+    await navigator.clipboard.writeText(shareUrl.value)
+    shareCopied.value = true
+    if (!options.silent) {
+      statusMessage.value = '分享链接已复制'
+    }
+    return true
+  } catch {
+    shareCopied.value = false
+    if (!options.silent) {
+      errorMessage.value = '复制失败，请手动复制分享链接'
+    }
+    return false
+  }
+}
+
+function buildSharedConversationUrl(shareId) {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+
+  const url = new URL(window.location.href)
+  url.hash = ''
+  url.searchParams.set('share', shareId)
+
+  if (normalizedApiBase.value) {
+    url.searchParams.set('apiBase', normalizedApiBase.value)
+  }
+
+  return url.toString()
+}
+
+function exitSharedConversation() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const url = new URL(window.location.href)
+  url.searchParams.delete('share')
+  window.location.assign(url.toString())
+}
+
 async function sendMessage() {
+  if (isSharedConversation.value) {
+    return
+  }
+
   const content = draft.value.trim()
 
   if (!content) {
@@ -321,6 +458,10 @@ function sendSuggestion(prompt) {
 }
 
 function startEditingMessage(message) {
+  if (isSharedConversation.value) {
+    return
+  }
+
   editingMessageId.value = message.id
   editingMessageContent.value = message.content
 }
@@ -331,6 +472,10 @@ function cancelEditingMessage() {
 }
 
 async function submitEditedMessage() {
+  if (isSharedConversation.value) {
+    return
+  }
+
   const content = editingMessageContent.value.trim()
 
   if (!content || activeConversationPending.value) {
@@ -872,6 +1017,28 @@ function buildConversationTitle(content) {
   return content.replace(/\s+/g, ' ').trim().slice(0, 24) || '新对话'
 }
 
+function normalizeSharedConversation(conversation, share = {}) {
+  const source = conversation && typeof conversation === 'object' ? conversation : {}
+  const messages = Array.isArray(source.messages)
+    ? source.messages.map((message, index) => ({
+        id: compactText(message?.id) || `shared-message-${index + 1}`,
+        role: message?.role === 'assistant' ? 'assistant' : 'user',
+        content: typeof message?.content === 'string' ? message.content : '',
+        createdAt: message?.createdAt || '',
+        isError: Boolean(message?.isError),
+      }))
+    : []
+
+  return {
+    id: `shared-${compactText(share?.id) || sharedConversationId.value || 'conversation'}`,
+    title: compactText(source.title) || '分享的对话',
+    createdAt: source.createdAt || share?.createdAt || '',
+    updatedAt: source.updatedAt || share?.updatedAt || '',
+    model: compactText(source.model),
+    messages,
+  }
+}
+
 function compactText(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -957,6 +1124,14 @@ function readApiBaseFromQuery() {
   return compactText(new URLSearchParams(window.location.search).get('apiBase'))
 }
 
+function readSharedConversationIdFromUrl() {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+
+  return compactText(new URLSearchParams(window.location.search).get('share'))
+}
+
 function isLocalHostname(hostname) {
   return ['localhost', '127.0.0.1', '0.0.0.0'].includes(hostname)
 }
@@ -1025,7 +1200,7 @@ function createMarkdownRenderer() {
     <div class="codex-app" :class="{ 'is-light': !isDarkMode }">
       <div v-if="shouldShowDrawerOverlay" class="codex-overlay" @click="closeDrawer" />
 
-      <aside class="codex-drawer" :class="{ 'is-open': shouldShowDrawer, 'is-desktop': isDesktop, 'is-collapsed': isSidebarCollapsed }">
+      <aside v-if="!isSharedConversation" class="codex-drawer" :class="{ 'is-open': shouldShowDrawer, 'is-desktop': isDesktop, 'is-collapsed': isSidebarCollapsed }">
         <div class="codex-drawer-header">
           <div v-if="!isSidebarCollapsed">
             <p class="codex-drawer-kicker">Codex Workspace</p>
@@ -1089,19 +1264,28 @@ function createMarkdownRenderer() {
       <section class="codex-stage">
         <header class="codex-topbar" :class="{ 'is-elevated': hasScrolledMessages }">
           <div class="codex-topbar-group">
-            <button v-if="!isDesktop" type="button" class="codex-round-button" @click="toggleDrawer('history')" aria-label="打开历史对话">
+            <button v-if="!isDesktop && !isSharedConversation" type="button" class="codex-round-button" @click="toggleDrawer('history')" aria-label="打开历史对话">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
-            <button type="button" class="codex-pill-button codex-pill-button--brand" @click="openDrawer('history')">
+            <button type="button" class="codex-pill-button codex-pill-button--brand" @click="isSharedConversation ? exitSharedConversation() : openDrawer('history')">
               <span class="codex-pill-mark">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
               </span>
-              <span>Codex</span>
+              <span>{{ isSharedConversation ? 'Codex Share' : 'Codex' }}</span>
             </button>
           </div>
 
           <div class="codex-topbar-group">
             <button
+              v-if="isSharedConversation"
+              type="button"
+              class="codex-pill-button codex-pill-button--status is-online"
+              @click="exitSharedConversation"
+            >
+              只读分享
+            </button>
+            <button
+              v-else
               type="button"
               class="codex-pill-button codex-pill-button--status"
               :class="serviceStateClass"
@@ -1109,11 +1293,23 @@ function createMarkdownRenderer() {
             >
               {{ serviceStateText }}
             </button>
+            <button
+              v-if="!isSharedConversation"
+              type="button"
+              class="codex-round-button"
+              :disabled="!canShareConversation"
+              :aria-label="shareCreating ? '正在生成分享链接' : '分享对话'"
+              :title="shareCreating ? '正在生成分享链接' : '分享对话'"
+              @click="shareCurrentConversation"
+            >
+              <svg v-if="!shareCreating" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              <span v-else class="codex-button-spinner" aria-hidden="true" />
+            </button>
             <button type="button" class="codex-round-button" @click="isDarkMode = !isDarkMode" :aria-label="isDarkMode ? '切换为浅色模式' : '切换为深色模式'">
               <svg v-if="isDarkMode" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
               <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
             </button>
-            <button type="button" class="codex-round-button" @click="showSettings = true" aria-label="设置">
+            <button v-if="!isSharedConversation" type="button" class="codex-round-button" @click="showSettings = true" aria-label="设置">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
           </div>
@@ -1121,7 +1317,7 @@ function createMarkdownRenderer() {
 
         <section ref="messageViewport" class="codex-stage-scroll" @scroll="updateScrollIndicators">
           <div v-if="!hasMessages" class="codex-welcome">
-            <h2>What can I help with?</h2>
+            <h2>{{ loadingSharedConversation ? '正在加载分享对话...' : isSharedConversation ? '分享对话不可用' : 'What can I help with?' }}</h2>
             <!-- <p>让 Codex 帮你读代码、分析问题、制定计划，或者直接推动一个实现方案。</p> -->
 
             <div class="codex-context-chips codex-context-chips--center">
@@ -1194,7 +1390,7 @@ function createMarkdownRenderer() {
                 input {{ message.usage.input_tokens }} · cached {{ message.usage.cached_input_tokens }} · output {{ message.usage.output_tokens }}
               </p>
 
-              <div v-if="message.role === 'user' && editingMessageId !== message.id" class="codex-message-actions">
+              <div v-if="!isSharedConversation && message.role === 'user' && editingMessageId !== message.id" class="codex-message-actions">
                 <button
                   type="button"
                   class="codex-message-edit-button"
@@ -1220,11 +1416,17 @@ function createMarkdownRenderer() {
 
         <div class="codex-feedback-row">
           <p v-if="statusMessage" class="codex-feedback-text codex-feedback-text--success">{{ statusMessage }}</p>
+          <p v-if="loadingSharedConversation" class="codex-feedback-text">正在加载分享对话...</p>
           <p v-if="loadingConversation" class="codex-feedback-text">正在加载会话...</p>
           <p v-if="errorMessage" class="codex-feedback-text codex-feedback-text--error">{{ errorMessage }}</p>
         </div>
 
-        <form class="codex-composer" :class="{ 'is-elevated': !isNearMessageBottom }" @submit.prevent="sendMessage">
+        <div v-if="isSharedConversation" class="codex-shared-footer" :class="{ 'is-elevated': !isNearMessageBottom }">
+          <span>此链接为只读快照，无法继续发送消息。</span>
+          <button type="button" class="codex-soft-button" @click="exitSharedConversation">返回聊天</button>
+        </div>
+
+        <form v-else class="codex-composer" :class="{ 'is-elevated': !isNearMessageBottom }" @submit.prevent="sendMessage">
           <button type="button" class="codex-composer-side" @click="createConversation" aria-label="新建对话">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
@@ -1245,7 +1447,7 @@ function createMarkdownRenderer() {
 
       <!-- Settings Modal -->
       <Teleport to="body">
-        <div v-if="showSettings" class="codex-modal-overlay" @click="showSettings = false">
+        <div v-if="showSettings" class="codex-modal-overlay" :class="{ 'is-light': !isDarkMode }" @click="showSettings = false">
           <div class="codex-modal" @click.stop>
             <div class="codex-modal-header">
               <h3>设置</h3>
@@ -1332,6 +1534,36 @@ function createMarkdownRenderer() {
                 <input v-model="networkAccessEnabled" type="checkbox" />
                 <span>允许网络访问</span>
               </label> -->
+            </div>
+          </div>
+        </div>
+      </Teleport>
+
+      <!-- Share Modal -->
+      <Teleport to="body">
+        <div v-if="showShareDialog" class="codex-modal-overlay" :class="{ 'is-light': !isDarkMode }" @click="showShareDialog = false">
+          <div class="codex-modal codex-share-modal" @click.stop>
+            <div class="codex-modal-header">
+              <h3>分享对话</h3>
+              <button type="button" class="codex-modal-close" @click="showShareDialog = false">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <div class="codex-modal-body codex-share-body">
+              <div class="codex-share-summary">
+                <strong>{{ activeConversation?.title || '当前对话' }}</strong>
+                <span>{{ activeMessages.length }} 条消息 · 只读快照</span>
+              </div>
+
+              <div class="codex-share-link-row">
+                <input class="codex-input codex-share-link-input" :value="shareUrl" readonly />
+                <button type="button" class="codex-soft-button" @click="copyShareUrl">
+                  {{ shareCopied ? '已复制' : '复制' }}
+                </button>
+              </div>
+
+              <p class="codex-share-note">链接会打开当前对话的公开快照，不包含 API Key、工作目录或运行配置。</p>
             </div>
           </div>
         </div>
