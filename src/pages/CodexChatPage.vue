@@ -423,16 +423,6 @@ function buildSharedConversationUrl(shareId) {
   return url.toString()
 }
 
-function exitSharedConversation() {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  const url = new URL(window.location.href)
-  url.searchParams.delete('share')
-  window.location.assign(url.toString())
-}
-
 async function sendMessage() {
   if (isSharedConversation.value) {
     return
@@ -1267,7 +1257,12 @@ function createMarkdownRenderer() {
             <button v-if="!isDesktop && !isSharedConversation" type="button" class="codex-round-button" @click="toggleDrawer('history')" aria-label="打开历史对话">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
-            <button type="button" class="codex-pill-button codex-pill-button--brand" @click="isSharedConversation ? exitSharedConversation() : openDrawer('history')">
+            <button
+              type="button"
+              class="codex-pill-button codex-pill-button--brand"
+              :class="{ 'is-static': isSharedConversation }"
+              @click="!isSharedConversation && openDrawer('history')"
+            >
               <span class="codex-pill-mark">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
               </span>
@@ -1276,14 +1271,12 @@ function createMarkdownRenderer() {
           </div>
 
           <div class="codex-topbar-group">
-            <button
+            <div
               v-if="isSharedConversation"
-              type="button"
               class="codex-pill-button codex-pill-button--status is-online"
-              @click="exitSharedConversation"
             >
               只读分享
-            </button>
+            </div>
             <button
               v-else
               type="button"
@@ -1423,7 +1416,6 @@ function createMarkdownRenderer() {
 
         <div v-if="isSharedConversation" class="codex-shared-footer" :class="{ 'is-elevated': !isNearMessageBottom }">
           <span>此链接为只读快照，无法继续发送消息。</span>
-          <button type="button" class="codex-soft-button" @click="exitSharedConversation">返回聊天</button>
         </div>
 
         <form v-else class="codex-composer" :class="{ 'is-elevated': !isNearMessageBottom }" @submit.prevent="sendMessage">
