@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "export:italy-trip": "node scripts/export-italy-trip-excel.mjs",
+    "export:italy-visa-itinerary": "node scripts/export-italy-visa-itinerary-excel.mjs",
     "generate:share-cover": "node scripts/generate-share-cover.mjs",
     "generate:favicon": "node scripts/generate-favicon-assets.mjs"
   },

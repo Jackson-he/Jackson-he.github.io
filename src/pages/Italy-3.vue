@@ -100,6 +100,8 @@ const quickCards = computed(() => {
   return cards
 })
 
+const selectedDayPlanningCards = computed(() => selectedDay.value?.planningCards || [])
+
 const timelineEntries = computed(() => {
   if (!selectedDay.value?.timeline) return []
   return selectedDay.value.timeline.map(item => {
@@ -446,6 +448,13 @@ watch(activeTab, (tab) => {
           <div class="panel-heading">
             <span class="panel-meta">今日行程 · {{ selectedDay.label }}</span>
             <button class="text-button" @click="activeTab = 'map'">切到地图</button>
+          </div>
+          <div v-if="selectedDayPlanningCards.length" class="planning-grid">
+            <article v-for="card in selectedDayPlanningCards" :key="`${selectedDay.id}-${card.label}-${card.title}`" class="planning-card">
+              <span class="planning-label">{{ card.label }}</span>
+              <strong class="planning-title">{{ card.title }}</strong>
+              <p class="planning-body">{{ card.body }}</p>
+            </article>
           </div>
           <div class="timeline">
             <div class="timeline-rail"></div>
@@ -856,6 +865,44 @@ watch(activeTab, (tab) => {
 .summary-text {
   font-size: 12px;
   color: #6b5d50;
+}
+
+/* Day Planning */
+.planning-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.planning-card {
+  background: linear-gradient(180deg, rgba(255 248 241 / 0.96), rgba(250 244 236 / 0.98));
+  border: 1px solid rgba(194 89 74 / 0.12);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.planning-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #a06a4a;
+  font-weight: 700;
+}
+
+.planning-title {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.planning-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #5d5145;
 }
 
 /* Tab Panel */

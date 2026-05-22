@@ -727,8 +727,26 @@ select {
   background: #2f2f2f;
 }
 
+.codex-round-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.codex-round-button:disabled:hover {
+  background: transparent;
+}
+
 .codex-round-button--subtle {
   color: #8e8e8e;
+}
+
+.codex-button-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(236, 236, 236, 0.25);
+  border-top-color: #ececec;
+  border-radius: 50%;
+  animation: codexSpin 0.8s linear infinite;
 }
 
 .codex-pill-button {
@@ -747,6 +765,14 @@ select {
 
 .codex-pill-button:hover {
   background: #2f2f2f;
+}
+
+.codex-pill-button.is-static {
+  cursor: default;
+}
+
+.codex-pill-button.is-static:hover {
+  background: transparent;
 }
 
 .codex-pill-button--brand {
@@ -1363,6 +1389,30 @@ select {
   cursor: not-allowed;
 }
 
+.codex-shared-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin: 0 auto 12px;
+  width: min(768px, calc(100% - 48px));
+  border-radius: 16px;
+  background: #2f2f2f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #8e8e8e;
+  font-size: 0.86rem;
+}
+
+.codex-shared-footer.is-elevated {
+  border-color: rgba(124, 124, 247, 0.3);
+  background: #333;
+}
+
+.codex-shared-footer span {
+  min-width: 0;
+}
+
 /* Buttons */
 .codex-soft-button {
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1454,7 +1504,86 @@ select {
   overflow-y: auto;
 }
 
+.codex-share-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.codex-share-body {
+  display: grid;
+  gap: 14px;
+}
+
+.codex-share-summary {
+  display: grid;
+  gap: 4px;
+}
+
+.codex-share-summary strong {
+  color: #ececec;
+  font-size: 0.95rem;
+}
+
+.codex-share-summary span,
+.codex-share-note {
+  color: #8e8e8e;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.codex-share-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.codex-share-link-input {
+  min-width: 0;
+  font-size: 0.82rem;
+}
+
+.codex-share-note {
+  margin: 0;
+}
+
+.codex-modal-overlay.is-light {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.codex-modal-overlay.is-light .codex-modal {
+  background: #f0f0f0;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.codex-modal-overlay.is-light .codex-modal-header {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+.codex-modal-overlay.is-light .codex-modal-header h3,
+.codex-modal-overlay.is-light .codex-share-summary strong {
+  color: #1a1a1a;
+}
+
+.codex-modal-overlay.is-light .codex-modal-close {
+  color: #888;
+}
+
+.codex-modal-overlay.is-light .codex-modal-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1a1a1a;
+}
+
+.codex-modal-overlay.is-light .codex-share-summary span,
+.codex-modal-overlay.is-light .codex-share-note {
+  color: #888;
+}
+
 /* Animations */
+@keyframes codexSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes codexPulse {
   0%,
   80%,
@@ -1565,6 +1694,18 @@ select {
     margin: 0 8px 8px;
     width: calc(100% - 16px);
     border-radius: 14px;
+  }
+
+  .codex-shared-footer {
+    align-items: stretch;
+    flex-direction: column;
+    margin: 0 8px 8px;
+    width: calc(100% - 16px);
+    border-radius: 14px;
+  }
+
+  .codex-share-link-row {
+    grid-template-columns: 1fr;
   }
 
   .codex-composer-input {
@@ -1966,12 +2107,25 @@ select {
   background: #e8e8e8;
 }
 
+.codex-app.is-light .codex-round-button:disabled:hover {
+  background: transparent;
+}
+
+.codex-app.is-light .codex-button-spinner {
+  border-color: rgba(26, 26, 26, 0.2);
+  border-top-color: #1a1a1a;
+}
+
 .codex-app.is-light .codex-pill-button {
   color: #1a1a1a;
 }
 
 .codex-app.is-light .codex-pill-button:hover {
   background: #e8e8e8;
+}
+
+.codex-app.is-light .codex-pill-button.is-static:hover {
+  background: transparent;
 }
 
 .codex-app.is-light .codex-pill-button--status {
@@ -2196,6 +2350,17 @@ select {
 .codex-app.is-light .codex-composer-send {
   background: #1a1a1a;
   color: #ffffff;
+}
+
+.codex-app.is-light .codex-shared-footer {
+  background: #f0f0f0;
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #888;
+}
+
+.codex-app.is-light .codex-shared-footer.is-elevated {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: #e8e8e8;
 }
 
 /* Soft button */
