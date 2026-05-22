@@ -24,6 +24,7 @@ const watchItems = ref([])
 const tradeSymbols = ref([])
 const selectedSymbol = ref(readStoredValue(SYMBOL_STORAGE_KEY, ''))
 const selectedInterval = ref('1h')
+const chartVisible = ref(false)
 const capitalEquityInput = ref(readStoredValue(CAPITAL_EQUITY_STORAGE_KEY, ''))
 const capitalAvailableInput = ref(readStoredValue(CAPITAL_AVAILABLE_STORAGE_KEY, ''))
 const riskRatioInput = ref(readStoredValue(RISK_RATIO_STORAGE_KEY, '1'))
@@ -254,7 +255,6 @@ watch(selectedSymbol, (value) => {
   if (typeof window !== 'undefined') {
     window.localStorage.setItem(SYMBOL_STORAGE_KEY, value)
   }
-  restartLiveFeed()
 })
 
 watch(selectedInterval, () => {
@@ -309,8 +309,8 @@ async function refreshDashboard(options = {}) {
   dashboard.error = ''
   try {
     await fetchWatchlist()
-    if (!selectedSymbol.value) {
-      applyEmptyState(EMPTY_QUEUE_MESSAGE)
+    if (!chartVisible.value || !selectedSymbol.value) {
+      applyIdleState(watchItems.value.length ? '点击左侧品类加载 K 线图；再次点击当前品类可隐藏。' : EMPTY_QUEUE_MESSAGE)
       return
     }
     const payload = await fetchMonitorPayload()
@@ -339,8 +339,9 @@ async function fetchWatchlist() {
   watchItems.value = nextWatchItems
   watchSymbols.value = nextWatchSymbols
   tradeSymbols.value = Array.isArray(payload.tradeSymbols) ? payload.tradeSymbols : []
-  if (!watchSymbols.value.includes(selectedSymbol.value)) {
-    selectedSymbol.value = watchSymbols.value[0] || ''
+  if (selectedSymbol.value && !watchSymbols.value.includes(selectedSymbol.value)) {
+    selectedSymbol.value = ''
+    chartVisible.value = false
   }
 }
 
@@ -349,6 +350,7 @@ function restartLiveFeed() {
   closeStream()
   refreshDashboard().finally(() => {
     if (runId !== refreshSequence) return
+    if (!chartVisible.value) return
     startStream()
   })
 }
@@ -363,7 +365,7 @@ function closeStream() {
 
 function startStream() {
   if (typeof window === 'undefined' || typeof EventSource === 'undefined') return
-  if (!apiUrl.value || !selectedSymbol.value) return
+  if (!chartVisible.value || !apiUrl.value || !selectedSymbol.value) return
   const url = `${apiUrl.value}/api/futures/stream?${buildMonitorQuery()}`
   streamSource = new EventSource(url)
   streamSource.onopen = () => {
@@ -420,6 +422,12 @@ function applyPayload(payload) {
   dashboard.sizing = { ...dashboard.sizing, ...(payload.sizing || {}) }
   dashboard.positions = payload.positions || []
   dashboard.events = payload.events || []
+}
+
+function applyIdleState(message) {
+  applyEmptyState(message)
+  dashboard.mode = 'idle'
+  dashboard.sourceLabel = watchItems.value.length ? '等待选择品类' : '等待提醒队列'
 }
 
 function applyEmptyState(message) {
@@ -479,6 +487,17 @@ function applyEmptyState(message) {
   dashboard.events = [
     { time: new Date().toLocaleTimeString(), text: message || '未获取到后端数据' },
   ]
+}
+
+function toggleSymbolChart(symbol) {
+  if (chartVisible.value && selectedSymbol.value === symbol) {
+    chartVisible.value = false
+    restartLiveFeed()
+    return
+  }
+  selectedSymbol.value = symbol
+  chartVisible.value = true
+  restartLiveFeed()
 }
 
 function buildMonitorQuery() {
@@ -670,8 +689,8 @@ function currency(value) {
                 v-for="item in filteredWatchItems"
                 :key="item.symbol"
                 class="fm-symbol-item"
-                :class="{ 'fm-symbol-item--active': item.symbol === selectedSymbol }"
-                @click="selectedSymbol = item.symbol"
+                :class="{ 'fm-symbol-item--active': chartVisible && item.symbol === selectedSymbol }"
+                @click="toggleSymbolChart(item.symbol)"
               >
                 <div class="fm-symbol-info">
                   <strong class="fm-symbol-name">{{ item.displayName || item.symbol }}</strong>
@@ -688,12 +707,15 @@ function currency(value) {
 
         <!-- Chart -->
         <section class="fm-panel fm-chart-panel">
-          <div class="fm-chart-header">
+          <div v-if="chartVisible" class="fm-chart-header">
             <div class="fm-chart-title-group">
               <h2 class="fm-chart-title">{{ selectedSymbolLabel }}</h2>
               <span class="fm-chart-interval">{{ INTERVAL_OPTIONS.find((item) => item.value === selectedInterval)?.label }}</span>
               <span class="fm-chart-code">{{ selectedSymbolDisplay }}</span>
             </div>
+            <button class="fm-chart-toggle" type="button" @click="toggleSymbolChart(selectedSymbol)">
+              隐藏 K 线
+            </button>
             <div class="fm-ticker" :class="currentPriceClass">
               <span class="fm-ticker-price">{{ dashboard.metrics.price.toFixed(2) }}</span>
               <span class="fm-ticker-change" :class="dashboard.metrics.changePct >= 0 ? 'fm-ticker-change--up' : 'fm-ticker-change--down'">
@@ -702,8 +724,14 @@ function currency(value) {
             </div>
           </div>
 
+          <div v-else class="fm-chart-idle">
+            <span class="fm-chart-idle-kicker">KLINE ON DEMAND</span>
+            <h2>默认不渲染 K 线图</h2>
+            <p>点击左侧任一品类后加载该合约 K 线；再次点击当前品类或点击“隐藏 K 线”即可关闭。</p>
+          </div>
+
           <!-- Metric strip -->
-          <div class="fm-metric-strip">
+          <div v-if="chartVisible" class="fm-metric-strip">
             <div class="fm-metric-item">
               <span class="fm-metric-label">MA6</span>
               <span class="fm-metric-value">{{ dashboard.metrics.ma6.toFixed(2) }}</span>
@@ -730,7 +758,7 @@ function currency(value) {
             </div>
           </div>
 
-          <div class="fm-chart-shell">
+          <div v-if="chartVisible" class="fm-chart-shell">
             <svg :viewBox="`0 0 ${chartState.width} ${chartState.height}`" class="fm-kline-chart" role="img" aria-label="期货K线图">
               <defs>
                 <linearGradient id="chartBg" x1="0%" x2="0%" y1="0%" y2="100%">
@@ -863,7 +891,7 @@ function currency(value) {
             </svg>
           </div>
 
-          <div class="fm-legend">
+          <div v-if="chartVisible" class="fm-legend">
             <span class="fm-legend-item"><i class="fm-legend-dot fm-legend-dot--yellow"></i>MA6</span>
             <span class="fm-legend-item"><i class="fm-legend-dot fm-legend-dot--purple"></i>MADKX</span>
             <span class="fm-legend-item"><i class="fm-legend-dot fm-legend-dot--red"></i>阳线 / 多头</span>
@@ -874,7 +902,7 @@ function currency(value) {
 
           <!-- Signal reason -->
           <div
-            v-if="dashboard.signal.reason"
+            v-if="chartVisible && dashboard.signal.reason"
             class="fm-signal-reason"
             :class="{
               'fm-signal-reason--long': dashboard.signal.hasSignal && dashboard.signal.side === 'long',
@@ -1450,6 +1478,23 @@ function currency(value) {
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
 }
 
+.fm-chart-toggle {
+  margin-left: auto;
+  padding: 5px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.75);
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fm-chart-toggle:hover {
+  border-color: rgba(248, 250, 252, 0.42);
+  color: #f8fafc;
+}
+
 .fm-ticker {
   display: flex;
   align-items: baseline;
@@ -1517,6 +1562,42 @@ function currency(value) {
 }
 
 /* Chart area */
+.fm-chart-idle {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px;
+  color: rgba(226, 232, 240, 0.68);
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(59, 130, 246, 0.14), transparent 32%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.5), rgba(2, 6, 23, 0.2));
+}
+
+.fm-chart-idle-kicker {
+  color: rgba(147, 197, 253, 0.86);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.fm-chart-idle h2 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 1.15rem;
+}
+
+.fm-chart-idle p {
+  max-width: 420px;
+  margin: 0;
+  line-height: 1.7;
+  font-size: 0.86rem;
+}
+
 .fm-chart-shell {
   flex: 1;
   overflow: auto;
