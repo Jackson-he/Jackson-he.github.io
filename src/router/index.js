@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '@/pages/HomePage.vue'
-import CompliancePage from '@/pages/CompliancePage.vue'
 import EnglishHomePage from '@/pages/EnglishHomePage.vue'
 import EnglishModeListPage from '@/pages/EnglishModeListPage.vue'
 import EnglishPatternDetailPage from '@/pages/EnglishPatternDetailPage.vue'
@@ -46,16 +45,6 @@ const routes = [
       title: 'cartier',
       description: 'cartier。',
       sharePath: '/projects/cartier/',
-    },
-  },
-  {
-    path: '/projects/game',
-    name: 'compliance',
-    component: CompliancePage,
-    meta: {
-      title: '内容合规检测',
-      description: '基于 AI 模型的文本合规检测页，支持单条和批量检测。',
-      sharePath: '/projects/game/',
     },
   },
   {

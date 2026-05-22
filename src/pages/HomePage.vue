@@ -3,14 +3,6 @@ const year = new Date().getFullYear()
 
 const projects = [
   {
-    icon: '🔍',
-    title: '内容合规检测',
-    description: '基于 AI 模型的文本合规检测页，支持单条和批量检测。',
-    to: '/projects/game',
-    gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    size: 'wide',
-  },
-  {
     icon: '📚',
     title: '英语积累系统',
     description: '五大英语表达模式，支持模式浏览、例句展示与快速定位。',
