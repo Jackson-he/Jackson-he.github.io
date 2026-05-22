@@ -23,7 +23,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: resolve(rootDir, 'index.html'),
-        gameRedirect: resolve(rootDir, 'projects/game/index.html'),
         englishRedirect: resolve(rootDir, 'projects/data-viz/index.html'),
         englishModeRedirect: resolve(rootDir, 'projects/data-viz/mode-list.html'),
         englishPatternRedirect: resolve(rootDir, 'projects/data-viz/pattern-detail.html'),
