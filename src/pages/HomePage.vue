@@ -51,6 +51,14 @@ const projects = [
     size: 'normal',
   },
   {
+    icon: '💍',
+    title: '婚礼请帖',
+    description: '可替换新人信息、婚礼地点和婚纱照的电子请帖页面。',
+    to: '/invitation-1',
+    gradient: 'linear-gradient(135deg, #d8c3a5 0%, #8fa786 100%)',
+    size: 'wide',
+  },
+  {
     icon: '🛠️',
     title: '工具应用',
     description: '为后续更多工具页预留的模块化入口。',

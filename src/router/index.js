@@ -15,6 +15,7 @@ import ItalyTravelPage2 from '@/pages/ItalyTravelPage-2.vue'
 import ItalyThreePage from '@/pages/Italy-3.vue'
 import CartierPage from '@/pages/CartierPage.vue'
 import WeddingPage from '@/pages/WeddingPage.vue'
+import InvitationPage from '@/pages/Wedding-Invitation-1.vue'
 
 
 const SITE_NAME = '项目展示'
@@ -183,6 +184,18 @@ const routes = [
       title: 'Will You Marry Me?',
       description: 'A special moment.',
       sharePath: '/wedding/',
+    },
+  },
+  {
+    path: '/invitation-1',
+    name: 'invitation',
+    alias: '/invitation-1/',
+    component: InvitationPage,
+    meta: {
+      title: '婚礼请帖',
+      description: '何以辰与林予安的婚礼请帖，包含婚礼信息、当天流程和婚纱照相册。',
+      sharePath: '/invitation-1/',
+      image: `${SITE_URL}/wedding/photo-01.jpg`,
     },
   },
   {
