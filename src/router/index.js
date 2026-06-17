@@ -137,13 +137,13 @@ const routes = [
     },
   },
   {
-    path: '/projects/italy-1',
-    name: 'italy-travel-companion',
-    component: ItalyTravelCompanionPage,
+    path: '/projects/Italy',
+    name: 'Italy-3',
+    component: ItalyThreePage,
     meta: {
       title: '意大利出行工具',
-      description: '个人使用的意大利出行工具，把 Today、Map、Tickets、Transport、Trip 放进一个移动优先工作台。',
-      sharePath: '/projects/italy-3/',
+      description: '个人使用的意大利出行工具',
+      sharePath: '/projects/Italy/',
     },
   },
   {
@@ -154,16 +154,6 @@ const routes = [
       title: '意大利出行工具',
       description: '个人使用的意大利出行工具。',
       sharePath: '/projects/italy-2/',
-    },
-  },
-  {
-    path: '/projects/italy-3',
-    name: 'italy-3',
-    component: ItalyThreePage,
-    meta: {
-      title: '意大利出行工具',
-      description: '个人意大利出行辅助工具，包含今日行程、地图、票据、交通和旅程总览。',
-      sharePath: '/projects/italy-3/',
     },
   },
   {
