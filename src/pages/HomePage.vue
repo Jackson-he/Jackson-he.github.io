@@ -44,9 +44,9 @@ const projects = [
   },
   {
     icon: '🇮🇹',
-    title: '意大利出行工具',
+    title: '意大利旅程',
     description: '个人旅行工作台，集中处理 Today、地图、票据、交通规则和全程总览。',
-    to: '/projects/italy-1',
+    to: '/projects/Italy',
     gradient: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
     size: 'normal',
   },
