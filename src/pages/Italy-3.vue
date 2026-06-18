@@ -1109,27 +1109,32 @@ const selectedDayPlanningCards = computed(() => selectedDay.value?.planningCards
 const timelineEntries = computed(() => {
   if (!selectedDay.value?.timeline) return []
   return selectedDay.value.timeline.map(item => {
-    let entry = { id: item.refId, time: '', title: '', subtitle: '', note: '', tags: [], placeId: '', navigationPlaceId: '', kind: item.type }
+    let entry = { id: item.refId, time: '', title: '', subtitle: '', note: '', tags: [], placeId: '', navigationPlaceId: '', kind: item.type, icon: 'map-pin', tone: 'place-attraction' }
     if (item.type === 'hotel') {
       const p = placeMap.value.get(item.refId)
-      if (p) { entry = { ...entry, time: p.timeSort, title: p.name, subtitle: p.address, note: p.note, tags: p.riskTags || [], placeId: p.id, navigationPlaceId: p.id } }
+      if (p) { entry = { ...entry, time: p.timeSort, title: p.name, subtitle: p.address, note: p.note, tags: p.riskTags || [], placeId: p.id, navigationPlaceId: p.id, icon: 'home', tone: 'hotel' } }
     } else if (item.type === 'place') {
       const p = placeMap.value.get(item.refId)
-      if (p) { entry = { ...entry, time: p.timeSort, title: p.name, subtitle: typeLabel(p.type), note: p.note, tags: p.riskTags || [], placeId: p.id, navigationPlaceId: p.id } }
+      if (p) {
+        const meta = timelinePlaceMeta(p.type)
+        entry = { ...entry, time: p.timeSort, title: p.name, subtitle: typeLabel(p.type), note: p.note, tags: p.riskTags || [], placeId: p.id, navigationPlaceId: p.id, icon: meta.icon, tone: meta.tone }
+      }
     } else if (item.type === 'ticket') {
       const t = ticketMap.value.get(item.refId)
       if (t) {
-        entry = { ...entry, time: t.time, title: t.title, subtitle: `${ticketTypeLabel(t.type)} · ${t.operator || ''}`, note: t.notes?.join(locale.value === 'zh' ? '；' : '; ') || '', tags: t.warnings || [], placeId: t.placeId || '', navigationPlaceId: t.placeId || '' }
+        entry = { ...entry, time: t.time, title: t.title, subtitle: `${ticketTypeLabel(t.type)} · ${t.operator || ''}`, note: t.notes?.join(locale.value === 'zh' ? '；' : '; ') || '', tags: t.warnings || [], placeId: t.placeId || '', navigationPlaceId: t.placeId || '', icon: 'tag', tone: 'ticket' }
       }
     } else if (item.type === 'transport') {
       const leg = transportMap.value.get(item.refId)
       if (leg) {
-        entry = { ...entry, time: leg.departureTime, title: leg.title, subtitle: `${leg.operator} · ${leg.serviceNo}`, note: leg.ticketRules || '', tags: [], placeId: leg.toPlaceId, navigationPlaceId: leg.toPlaceId }
+        entry = { ...entry, time: leg.departureTime, title: leg.title, subtitle: `${leg.operator} · ${leg.serviceNo}`, note: leg.ticketRules || '', tags: [], placeId: leg.toPlaceId, navigationPlaceId: leg.toPlaceId, icon: 'navigation', tone: 'transport' }
       }
     }
     return entry
   })
 })
+
+const focusTimelineEntry = computed(() => timelineEntries.value.find(entry => entry.time) || timelineEntries.value[0] || null)
 
 const allTickets = computed(() => {
   return [...trip.value.tickets].sort((a, b) => `${a.date}${a.timeSort}`.localeCompare(`${b.date}${b.timeSort}`))
@@ -1212,6 +1217,15 @@ watch([selectedDay, mapPlaces], () => {
 // --- Methods ---
 function switchToDay(dayId) { selectedDayId.value = dayId }
 
+function shortDayDate(day) {
+  if (!day?.date) return day?.label || ''
+  return day.date.slice(5).replace('-', '/')
+}
+
+function cityLabel(city) {
+  return translateCity(city, locale.value) || city
+}
+
 function setMapView(scope, city) {
   mapScope.value = scope
   if (city) mapCity.value = city
@@ -1239,6 +1253,14 @@ function typeLabel(type) {
 
 function ticketTypeLabel(type) {
   return getMessage(`ticketTypes.${type}`) || type
+}
+
+function timelinePlaceMeta(type) {
+  if (type === 'station') return { icon: 'navigation', tone: 'place-station' }
+  if (type === 'restaurant') return { icon: 'coffee', tone: 'place-restaurant' }
+  if (type === 'airport') return { icon: 'airplay', tone: 'place-airport' }
+  if (type === 'hotel') return { icon: 'home', tone: 'hotel' }
+  return { icon: 'star', tone: 'place-attraction' }
 }
 
 function getPlace(placeId) {
@@ -1414,58 +1436,67 @@ watch(activeTab, (tab) => {
 <template>
   <main class="companion-page">
     <div class="companion-layout">
-      <section class="app-card">
-        <!-- Header -->
-        <header class="app-header">
-          <div class="app-header-left">
-            <span class="app-city">{{ selectedDay.city }}</span>
-            <span class="app-title">{{ trip.tripMeta.title }}</span>
-            <span class="app-subtitle">{{ selectedDay.label }} · {{ selectedDay.title }}</span>
+      <header class="app-header">
+        <div class="app-header-left">
+          <span class="app-city">{{ activeTab === 'today' ? 'TODAY' : getMessage(`tabs.${activeTab}`) }}</span>
+          <h1 class="app-title">{{ activeTab === 'today' ? selectedDay.title : trip.tripMeta.title }}</h1>
+          <p class="app-subtitle">{{ selectedDay.label }} · {{ cityLabel(selectedDay.city) }}</p>
+        </div>
+        <div class="header-actions">
+          <div class="language-switcher" role="group" :aria-label="getMessage('languageLabel')">
+            <button type="button" class="language-chip" :class="{ 'language-chip--active': locale === 'zh' }" @click="setLocale('zh')">
+              {{ getMessage('zh') }}
+            </button>
+            <button type="button" class="language-chip" :class="{ 'language-chip--active': locale === 'en' }" @click="setLocale('en')">
+              {{ getMessage('en') }}
+            </button>
           </div>
-          <div class="header-actions">
-            <div class="language-switcher" role="group" :aria-label="getMessage('languageLabel')">
-              <button type="button" class="language-chip" :class="{ 'language-chip--active': locale === 'zh' }" @click="setLocale('zh')">
-                {{ getMessage('zh') }}
-              </button>
-              <button type="button" class="language-chip" :class="{ 'language-chip--active': locale === 'en' }" @click="setLocale('en')">
-                {{ getMessage('en') }}
-              </button>
+          <a v-if="selectedDay.weatherUrl" :href="selectedDay.weatherUrl" target="_blank" rel="noopener" class="weather-link" :title="selectedDay.weatherLabel">
+            {{ locale === 'zh' ? '天气' : 'Weather' }}
+          </a>
+        </div>
+      </header>
+
+      <div class="day-switcher">
+        <button v-for="day in trip.days" :key="day.id" type="button" class="day-chip" :class="{ 'day-chip--active': day.id === selectedDayId }" @click="switchToDay(day.id)">
+          <span class="day-chip-date">{{ shortDayDate(day) }}</span>
+          <span class="day-chip-city">{{ cityLabel(day.city) }}</span>
+        </button>
+      </div>
+
+      <div class="content-scroll">
+        <section v-if="activeTab === 'today'" class="tab-panel today-panel">
+          <article v-if="focusTimelineEntry" class="focus-card">
+            <div class="focus-head">
+              <span class="focus-badge">NEXT</span>
+              <span class="focus-time">{{ focusTimelineEntry.time || selectedDay.label }}</span>
             </div>
-            <a v-if="selectedDay.weatherUrl" :href="selectedDay.weatherUrl" target="_blank" rel="noopener" class="weather-link">
-              {{ selectedDay.weatherLabel }}
-            </a>
+            <h2>{{ focusTimelineEntry.title }}</h2>
+            <p v-if="focusTimelineEntry.subtitle">{{ focusTimelineEntry.subtitle }}</p>
+            <div class="focus-actions">
+              <button v-if="focusTimelineEntry.placeId" type="button" class="focus-link" @click="focusPlaceOnMap(focusTimelineEntry.placeId)">
+                {{ getMessage('actions.viewMap') }}
+              </button>
+              <a v-if="focusTimelineEntry.navigationPlaceId" :href="googleMapsUrl(getPlace(focusTimelineEntry.navigationPlaceId) || { lat: 0, lng: 0 })" target="_blank" rel="noopener" class="focus-link">
+                {{ getMessage('actions.startNavigation') }}
+              </a>
+            </div>
+          </article>
+
+          <div v-if="selectedDay.topReminder" class="alert-strip">
+            <span class="alert-icon">!</span>
+            <span>{{ selectedDay.topReminder }}</span>
           </div>
-        </header>
 
-        <!-- Day Switcher -->
-        <div class="day-switcher">
-          <button v-for="day in trip.days" :key="day.id" class="day-chip" :class="{ 'day-chip--active': day.id === selectedDayId }" @click="switchToDay(day.id)">
-            {{ day.label }}
-          </button>
-        </div>
-
-        <!-- Alert Banner -->
-        <div v-if="selectedDay.topReminder" class="alert-strip">
-          <span class="alert-icon">!</span>
-          <span>{{ selectedDay.topReminder }}</span>
-        </div>
-
-        <!-- Summary Grid -->
-        <div class="summary-grid">
-          <div v-for="(card, i) in quickCards" :key="i" class="summary-card">
-            <span class="summary-label">{{ card.title }}</span>
-            <span class="summary-headline">{{ card.headline }}</span>
-            <span v-if="card.meta" class="summary-meta">{{ card.meta }}</span>
-            <span v-if="card.text" class="summary-text">{{ card.text }}</span>
+          <div class="summary-grid">
+            <button v-for="(card, i) in quickCards" :key="i" type="button" class="summary-card" :disabled="!card.placeId" @click="card.placeId && focusPlaceOnMap(card.placeId)">
+              <span class="summary-label">{{ card.title }}</span>
+              <span class="summary-headline">{{ card.headline }}</span>
+              <span v-if="card.meta" class="summary-meta">{{ card.meta }}</span>
+              <span v-if="card.text" class="summary-text">{{ card.text }}</span>
+            </button>
           </div>
-        </div>
 
-        <!-- ===== Today Tab ===== -->
-        <section v-if="activeTab === 'today'" class="tab-panel">
-          <div class="panel-heading">
-            <span class="panel-meta">{{ getMessage('sections.todayRoute') }} · {{ selectedDay.label }}</span>
-            <button class="text-button" @click="activeTab = 'map'">{{ getMessage('actions.switchToMap') }}</button>
-          </div>
           <div v-if="selectedDayPlanningCards.length" class="planning-grid">
             <article v-for="card in selectedDayPlanningCards" :key="`${selectedDay.id}-${card.label}-${card.title}`" class="planning-card">
               <span class="planning-label">{{ card.label }}</span>
@@ -1473,47 +1504,64 @@ watch(activeTab, (tab) => {
               <p class="planning-body">{{ card.body }}</p>
             </article>
           </div>
-          <div class="timeline">
-            <div class="timeline-rail"></div>
-            <div v-for="entry in timelineEntries" :key="entry.id" class="timeline-item">
-              <div class="timeline-dot"></div>
-              <div class="timeline-time">{{ entry.time }}</div>
-              <div class="timeline-body">
-                <span class="timeline-kind">{{ typeLabel(entry.kind) }}</span>
-                <strong>{{ entry.title }}</strong>
-                <span v-if="entry.subtitle" class="timeline-subtitle">{{ entry.subtitle }}</span>
-                <span v-if="entry.note" class="timeline-note">{{ entry.note }}</span>
-                <div v-if="entry.tags?.length" class="chip-row">
-                  <span v-for="tag in entry.tags" :key="tag" class="tag-chip tag-chip--soft">{{ tag }}</span>
-                </div>
+
+          <section class="timeline-card">
+            <div class="panel-heading">
+              <div>
+                <span class="panel-meta">{{ getMessage('sections.todayRoute') }}</span>
+                <strong class="panel-title">{{ timelineEntries.length }} {{ locale === 'zh' ? '项' : 'items' }}</strong>
+              </div>
+              <button type="button" class="text-button" @click="activeTab = 'map'">{{ getMessage('actions.switchToMap') }}</button>
+            </div>
+            <div class="timeline">
+              <article v-for="entry in timelineEntries" :key="entry.id" class="timeline-item">
+                <button
+                  type="button"
+                  class="timeline-main"
+                  :class="{ 'timeline-main--clickable': !!entry.placeId }"
+                  :disabled="!entry.placeId"
+                  @click="entry.placeId && focusPlaceOnMap(entry.placeId)"
+                >
+                  <span class="timeline-time">{{ entry.time || '-' }}</span>
+                  <span class="timeline-icon" :class="[`timeline-icon--${entry.tone}`, `timeline-icon--${entry.icon}`]" aria-hidden="true"></span>
+                  <span class="timeline-body">
+                    <span class="timeline-kind">{{ typeLabel(entry.kind) }}</span>
+                    <strong>{{ entry.title }}</strong>
+                    <span v-if="entry.subtitle" class="timeline-subtitle">{{ entry.subtitle }}</span>
+                    <span v-if="entry.note" class="timeline-note">{{ entry.note }}</span>
+                    <span v-if="entry.tags?.length" class="chip-row">
+                      <span v-for="tag in entry.tags" :key="tag" class="tag-chip tag-chip--soft">{{ tag }}</span>
+                    </span>
+                  </span>
+                </button>
                 <div class="action-row">
-                  <button v-if="entry.placeId" class="solid-link" @click="focusPlaceOnMap(entry.placeId)">{{ getMessage('actions.viewMap') }}</button>
+                  <button v-if="entry.placeId" type="button" class="solid-link" @click="focusPlaceOnMap(entry.placeId)">{{ getMessage('actions.viewMap') }}</button>
                   <a v-if="entry.navigationPlaceId" :href="googleMapsUrl(getPlace(entry.navigationPlaceId) || { lat: 0, lng: 0 })" target="_blank" rel="noopener" class="ghost-link">{{ getMessage('actions.startNavigation') }}</a>
                 </div>
-              </div>
+              </article>
+              <div v-if="!timelineEntries.length" class="empty-ticket">{{ getMessage('empty.timeline') }}</div>
             </div>
-            <div v-if="!timelineEntries.length" class="empty-ticket">{{ getMessage('empty.timeline') }}</div>
-          </div>
+          </section>
         </section>
 
-        <!-- ===== Map Tab ===== -->
         <section v-else-if="activeTab === 'map'" class="tab-panel">
           <div class="panel-heading">
-            <span class="panel-meta">{{ mapLabel }}</span>
+            <div>
+              <span class="panel-meta">{{ getMessage('tabs.mapCaption') }}</span>
+              <strong class="panel-title">{{ mapLabel }}</strong>
+            </div>
           </div>
 
-          <!-- Filter Strip -->
           <div class="filter-strip">
-            <button class="filter-chip" :class="{ 'filter-chip--active': mapScope === 'today' }" @click="setMapView('today')">{{ getMessage('map.today') }}</button>
-            <button v-for="city in cityOptions" :key="city" class="filter-chip" :class="{ 'filter-chip--active': mapScope === 'city' && mapCity === city }" @click="setMapView('city', city)">{{ city }}</button>
-            <button class="filter-chip" :class="{ 'filter-chip--active': mapScope === 'all' }" @click="setMapView('all')">{{ getMessage('map.all') }}</button>
+            <button type="button" class="filter-chip" :class="{ 'filter-chip--active': mapScope === 'today' }" @click="setMapView('today')">{{ getMessage('map.today') }}</button>
+            <button v-for="city in cityOptions" :key="city" type="button" class="filter-chip" :class="{ 'filter-chip--active': mapScope === 'city' && mapCity === city }" @click="setMapView('city', city)">{{ city }}</button>
+            <button type="button" class="filter-chip" :class="{ 'filter-chip--active': mapScope === 'all' }" @click="setMapView('all')">{{ getMessage('map.all') }}</button>
           </div>
 
-          <!-- AMAP Canvas -->
           <div class="map-layout">
             <div class="map-surface">
               <div class="map-surface-head">
-                <span class="panel-heading" style="font-size:13px">{{ mapLabel }}</span>
+                <span class="map-surface-title">{{ mapLabel }}</span>
               </div>
               <div ref="mapContainer" class="amap-canvas" :class="{ 'amap-canvas--loading': mapLoading }">
                 <div v-if="mapLoading" class="amap-overlay-loading">{{ getMessage('map.loading') }}</div>
@@ -1537,9 +1585,9 @@ watch(activeTab, (tab) => {
                 <div v-if="activeMapPlace.officialLink" class="detail-field"><strong>{{ getMessage('actions.officialLink') }}</strong><a :href="activeMapPlace.officialLink" target="_blank" rel="noopener">{{ activeMapPlace.officialLink }}</a></div>
               </div>
               <div class="mode-row">
-                <button class="mode-chip" :class="{ 'mode-chip--active': navMode === 'walk' }" @click="navMode = 'walk'">{{ getMessage('navModes.walk') }}</button>
-                <button class="mode-chip" :class="{ 'mode-chip--active': navMode === 'transit' }" @click="navMode = 'transit'">{{ getMessage('navModes.transit') }}</button>
-                <button class="mode-chip" :class="{ 'mode-chip--active': navMode === 'drive' }" @click="navMode = 'drive'">{{ getMessage('navModes.drive') }}</button>
+                <button type="button" class="mode-chip" :class="{ 'mode-chip--active': navMode === 'walk' }" @click="navMode = 'walk'">{{ getMessage('navModes.walk') }}</button>
+                <button type="button" class="mode-chip" :class="{ 'mode-chip--active': navMode === 'transit' }" @click="navMode = 'transit'">{{ getMessage('navModes.transit') }}</button>
+                <button type="button" class="mode-chip" :class="{ 'mode-chip--active': navMode === 'drive' }" @click="navMode = 'drive'">{{ getMessage('navModes.drive') }}</button>
               </div>
               <div class="action-row">
                 <a :href="googleMapsUrl(activeMapPlace)" target="_blank" rel="noopener" class="solid-link">Google Maps</a>
@@ -1548,25 +1596,25 @@ watch(activeTab, (tab) => {
             </article>
           </div>
 
-          <!-- Place List -->
           <div class="place-list">
-            <button v-for="(place, idx) in mapPlaces" :key="place.id" class="place-card" :class="{ 'place-card--active': place.id === activePlaceId }" @click="activePlaceId = place.id; focusMarker(place.id)">
+            <button v-for="(place, idx) in mapPlaces" :key="place.id" type="button" class="place-card" :class="{ 'place-card--active': place.id === activePlaceId }" @click="activePlaceId = place.id; focusMarker(place.id)">
               <span class="place-index">{{ idx + 1 }}</span>
-              <div class="place-card-body">
+              <span class="place-card-body">
                 <strong>{{ place.name }}</strong>
                 <span>{{ place.plannedTime || '' }} · {{ typeLabel(place.type) }}</span>
-              </div>
+              </span>
             </button>
           </div>
         </section>
 
-        <!-- ===== Tickets Tab ===== -->
         <section v-else-if="activeTab === 'tickets'" class="tab-panel">
           <div class="panel-heading">
-            <span class="panel-meta">{{ getMessage('sections.tickets') }}</span>
+            <div>
+              <span class="panel-meta">{{ getMessage('tabs.ticketsCaption') }}</span>
+              <strong class="panel-title">{{ getMessage('sections.tickets') }}</strong>
+            </div>
           </div>
 
-          <!-- Alerts -->
           <div class="alerts-grid">
             <div v-for="(alert, i) in trip.ticketAlerts" :key="i" class="alert-card">
               <strong>{{ alert.title }}</strong>
@@ -1574,7 +1622,6 @@ watch(activeTab, (tab) => {
             </div>
           </div>
 
-          <!-- Today's Tickets -->
           <div class="ticket-block">
             <div class="section-heading">{{ getMessage('sections.todayTickets') }}</div>
             <div v-if="selectedDayTickets.length" class="ticket-list">
@@ -1590,7 +1637,7 @@ watch(activeTab, (tab) => {
                   <div v-for="w in ticket.warnings" :key="w" class="tag-chip tag-chip--soft">{{ w }}</div>
                 </div>
                 <div class="action-row">
-                  <button v-if="ticket.placeId" class="solid-link" @click="focusPlaceOnMap(ticket.placeId)">{{ getMessage('actions.viewMap') }}</button>
+                  <button v-if="ticket.placeId" type="button" class="solid-link" @click="focusPlaceOnMap(ticket.placeId)">{{ getMessage('actions.viewMap') }}</button>
                   <a v-if="ticket.officialLink" :href="ticket.officialLink" target="_blank" rel="noopener" class="ghost-link">{{ getMessage('actions.officialEntry') }}</a>
                 </div>
               </div>
@@ -1598,7 +1645,6 @@ watch(activeTab, (tab) => {
             <div v-else class="empty-ticket">{{ getMessage('empty.tickets') }}</div>
           </div>
 
-          <!-- All Tickets -->
           <div class="ticket-block">
             <div class="section-heading">{{ getMessage('sections.allTickets') }}</div>
             <div class="ticket-list">
@@ -1606,7 +1652,7 @@ watch(activeTab, (tab) => {
                 <strong>{{ ticket.date }} {{ ticket.time }} · {{ ticket.city }}</strong>
                 <span class="subtitle-line">{{ ticket.title }}</span>
                 <div class="action-row">
-                  <button v-if="ticket.placeId" class="solid-link" @click="focusPlaceOnMap(ticket.placeId)">{{ getMessage('actions.viewMap') }}</button>
+                  <button v-if="ticket.placeId" type="button" class="solid-link" @click="focusPlaceOnMap(ticket.placeId)">{{ getMessage('actions.viewMap') }}</button>
                   <a v-if="ticket.officialLink" :href="ticket.officialLink" target="_blank" rel="noopener" class="ghost-link">{{ getMessage('actions.official') }}</a>
                 </div>
               </div>
@@ -1614,13 +1660,14 @@ watch(activeTab, (tab) => {
           </div>
         </section>
 
-        <!-- ===== Transport Tab ===== -->
         <section v-else-if="activeTab === 'transport'" class="tab-panel">
           <div class="panel-heading">
-            <span class="panel-meta">{{ getMessage('sections.transport') }} · {{ selectedDay.label }}</span>
+            <div>
+              <span class="panel-meta">{{ getMessage('tabs.transportCaption') }}</span>
+              <strong class="panel-title">{{ getMessage('sections.transport') }} · {{ selectedDay.label }}</strong>
+            </div>
           </div>
 
-          <!-- Transport Legs -->
           <div class="transport-list">
             <div v-for="leg in selectedDayLegs" :key="leg.id" class="transport-card">
               <div class="transport-top">
@@ -1641,14 +1688,13 @@ watch(activeTab, (tab) => {
               </div>
               <div class="action-row">
                 <a v-if="leg.stationMapLink" :href="leg.stationMapLink" target="_blank" rel="noopener" class="solid-link">{{ getMessage('actions.stationMap') }}</a>
-                <button v-if="leg.toPlaceId" class="ghost-link" @click="focusPlaceOnMap(leg.toPlaceId)">{{ getMessage('actions.arrivalNavigation') }}</button>
+                <button v-if="leg.toPlaceId" type="button" class="ghost-link" @click="focusPlaceOnMap(leg.toPlaceId)">{{ getMessage('actions.arrivalNavigation') }}</button>
                 <a v-if="leg.officialLink" :href="leg.officialLink" target="_blank" rel="noopener" class="ghost-link">{{ getMessage('actions.officialEntry') }}</a>
               </div>
             </div>
             <div v-if="!selectedDayLegs.length" class="empty-ticket">{{ getMessage('empty.transport') }}</div>
           </div>
 
-          <!-- Transport Rules -->
           <div class="rules-grid">
             <div v-for="(rule, i) in trip.transportRules" :key="i" class="rule-card">
               <strong>{{ rule.title }}</strong>
@@ -1656,7 +1702,6 @@ watch(activeTab, (tab) => {
             </div>
           </div>
 
-          <!-- Resources -->
           <div class="resource-row">
             <a v-for="res in trip.transportResources" :key="res.title" :href="res.url" target="_blank" rel="noopener" class="resource-card">
               <strong>{{ res.title }}</strong>
@@ -1665,47 +1710,51 @@ watch(activeTab, (tab) => {
           </div>
         </section>
 
-        <!-- ===== Trip Tab ===== -->
         <section v-else class="tab-panel">
           <div class="panel-heading">
-            <span class="panel-meta">{{ getMessage('sections.tripOverview') }} · {{ trip.dateRange }}</span>
+            <div>
+              <span class="panel-meta">{{ getMessage('sections.tripOverview') }}</span>
+              <strong class="panel-title">{{ trip.dateRange }}</strong>
+            </div>
           </div>
 
-          <!-- Jump Strip -->
-          <div class="jump-strip">
-            <button v-for="day in trip.days" :key="day.id" class="jump-chip" :class="{ 'jump-chip--active': day.id === selectedDayId }" @click="switchToDay(day.id)">{{ day.label }}</button>
-          </div>
+          <!-- <div class="trip-summary">
+            <strong>{{ trip.tripMeta.title }}</strong>
+            <span>{{ trip.tripMeta.subtitle }}</span>
+          </div> -->
 
-          <!-- City Groups -->
+          <!-- <div class="jump-strip">
+            <button v-for="day in trip.days" :key="day.id" type="button" class="jump-chip" :class="{ 'jump-chip--active': day.id === selectedDayId }" @click="switchToDay(day.id)">{{ shortDayDate(day) }} {{ cityLabel(day.city) }}</button>
+          </div> -->
+
           <div class="trip-groups">
             <div v-for="group in groupedTripDays" :key="group.city" class="trip-group">
               <div class="trip-group-head">
-                <strong>{{ group.city }}</strong>
+                <strong>{{ cityLabel(group.city) }}</strong>
                 <span>{{ group.startingLabel }} {{ getMessage('badges.starts') }}</span>
               </div>
               <div class="trip-days">
-                <div v-for="day in group.days" :key="day.id" class="trip-day-card" :class="{ 'trip-day-card--active': day.id === selectedDayId }" @click="switchToDay(day.id)">
-                  <div class="trip-day-top">
+                <button v-for="day in group.days" :key="day.id" type="button" class="trip-day-card" :class="{ 'trip-day-card--active': day.id === selectedDayId }" @click="switchToDay(day.id)">
+                  <span class="trip-day-top">
                     <strong>{{ day.label }}</strong>
                     <span>{{ day.title }}</span>
-                  </div>
-                  <div class="chip-row">
+                  </span>
+                  <span class="chip-row">
                     <span v-if="day.isCitySwitch" class="tag-chip">{{ getMessage('badges.citySwitch') }}</span>
                     <span v-if="day.isHotelSwitch" class="tag-chip tag-chip--soft">{{ day.hotelName }}</span>
                     <span v-if="day.keyTransport" class="tag-chip tag-chip--soft">{{ day.keyTransport }}</span>
                     <span v-if="day.keyTicket" class="tag-chip tag-chip--soft">{{ day.keyTicket }}</span>
-                  </div>
+                  </span>
                   <span class="trip-day-note">{{ day.weatherLabel }}</span>
-                </div>
+                </button>
               </div>
             </div>
           </div>
         </section>
-      </section>
+      </div>
 
-      <!-- Bottom Nav -->
       <nav class="bottom-nav">
-        <button v-for="tab in tabs" :key="tab.id" class="bottom-nav-item" :class="{ 'bottom-nav-item--active': activeTab === tab.id }" @click="activeTab = tab.id">
+        <button v-for="tab in tabs" :key="tab.id" type="button" class="bottom-nav-item" :class="{ 'bottom-nav-item--active': activeTab === tab.id }" @click="activeTab = tab.id">
           <span class="bottom-nav-label">{{ tab.label }}</span>
           <span class="bottom-nav-caption">{{ tab.caption }}</span>
         </button>
@@ -2711,5 +2760,1266 @@ watch(activeTab, (tab) => {
 .bottom-nav-caption {
   font-size: 10px;
   opacity: 0.7;
+}
+</style>
+
+<style scoped>
+.companion-page {
+  --bg: #fef6ec;
+  --bg-dim: #f6ecdc;
+  --surface: #ffffff;
+  --surface-muted: #fbf2e3;
+  --surface-inverse: #1a1410;
+  --ink: #241712;
+  --ink-secondary: #5a4538;
+  --muted: #9b8678;
+  --divider: #ecdfcb;
+  --accent: #c5562b;
+  --accent-deep: #8c3613;
+  --accent-soft: #ffe2cf;
+  --accent-ink: #ffffff;
+  --green: #2a7a4a;
+  --green-soft: #d6ecdc;
+  --blue: #274d8c;
+  --blue-soft: #dbe5f2;
+  --warning: #d68c10;
+  --warning-soft: #fbeacb;
+  min-height: 100vh;
+  padding: 16px 16px 118px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  line-height: 1.45;
+}
+
+.companion-page,
+.companion-page * {
+  box-sizing: border-box;
+  letter-spacing: 0;
+}
+
+.companion-page button,
+.companion-page a {
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.companion-layout {
+  width: min(100%, 560px);
+  margin: 0 auto;
+}
+
+.app-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 8px;
+  margin: 0;
+}
+
+.app-header-left {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-city {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.app-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.18;
+}
+
+.app-subtitle {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.language-switcher {
+  display: inline-flex;
+  padding: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgba(26 20 16 / 0.05);
+}
+
+.language-chip {
+  min-width: 48px;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.language-chip--active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.weather-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.day-switcher,
+.filter-strip,
+.jump-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 4px 12px;
+  margin: 0 -4px;
+  scrollbar-width: none;
+}
+
+.day-switcher::-webkit-scrollbar,
+.filter-strip::-webkit-scrollbar,
+.jump-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.day-chip,
+.filter-chip,
+.jump-chip,
+.mode-chip {
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(26 20 16 / 0.04);
+}
+
+.day-chip {
+  min-width: 76px;
+  height: 42px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+}
+
+.day-chip-date {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.day-chip-city {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.15;
+  margin-top: 2px;
+}
+
+.day-chip--active,
+.filter-chip--active,
+.jump-chip--active,
+.mode-chip--active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.day-chip--active .day-chip-date,
+.day-chip--active .day-chip-city {
+  color: var(--accent-ink);
+}
+
+.content-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+}
+
+.focus-card {
+  border-radius: 24px;
+  padding: 16px;
+  background: var(--surface-inverse);
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(26 20 16 / 0.16);
+}
+
+.focus-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.focus-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.focus-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.focus-time {
+  color: #ffd6a8;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.focus-card h2 {
+  margin: 10px 0 0;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.focus-card p {
+  margin: 6px 0 0;
+  color: #d8c8b8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.focus-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.focus-link {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(255 255 255 / 0.12);
+  color: var(--accent-ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.alert-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--accent-soft);
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.alert-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.summary-grid,
+.planning-grid,
+.alerts-grid,
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.summary-card,
+.planning-card,
+.alert-card,
+.rule-card,
+.ticket-card,
+.transport-card,
+.resource-card,
+.trip-summary,
+.map-detail,
+.map-surface,
+.trip-group,
+.timeline-card {
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 2px 10px rgba(26 20 16 / 0.05);
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  min-height: 104px;
+  padding: 14px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.summary-card:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.summary-label,
+.planning-label,
+.timeline-kind,
+.detail-kicker,
+.transport-operator {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.summary-headline,
+.planning-title,
+.ticket-card strong,
+.transport-card strong,
+.rule-card strong,
+.alert-card strong,
+.resource-card strong,
+.trip-summary strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.summary-meta,
+.summary-text,
+.subtitle-line,
+.resource-card span,
+.trip-summary span {
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.planning-card {
+  padding: 14px;
+}
+
+.planning-body,
+.alert-card p,
+.rule-card p {
+  margin: 6px 0 0;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.timeline-card {
+  padding: 10px 8px 8px;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 0 6px 4px;
+}
+
+.panel-heading > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.panel-title,
+.section-heading {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.text-button,
+.solid-link,
+.ghost-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.text-button,
+.ghost-link {
+  border: 1px solid var(--divider);
+  background: var(--surface);
+  color: var(--ink-secondary);
+}
+
+.solid-link {
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+}
+
+.timeline-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 14px;
+}
+
+.timeline-main {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 50px 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.timeline-main:disabled {
+  cursor: default;
+}
+
+.timeline-main--clickable {
+  cursor: pointer;
+}
+
+.timeline-time {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.timeline-icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  position: relative;
+}
+
+.timeline-icon::before,
+.timeline-icon::after {
+  content: "";
+  position: absolute;
+  display: block;
+}
+
+.timeline-icon--transport,
+.timeline-icon--place-airport {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.timeline-icon--ticket,
+.timeline-icon--place-attraction {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.timeline-icon--hotel {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.timeline-icon--place-station {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+
+.timeline-icon--place-restaurant {
+  background: #f0e4d6;
+  color: #7a5a32;
+}
+
+.timeline-icon--navigation::before,
+.timeline-icon--airplay::before {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 15px solid currentColor;
+  transform: rotate(42deg) translate(1px, -1px);
+  transform-origin: center;
+}
+
+.timeline-icon--navigation::after,
+.timeline-icon--airplay::after {
+  width: 4px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--surface);
+  transform: rotate(42deg) translate(0, 3px);
+}
+
+.timeline-icon--tag::before {
+  width: 14px;
+  height: 11px;
+  border-radius: 3px 3px 3px 6px;
+  border: 2px solid currentColor;
+  transform: rotate(-28deg);
+}
+
+.timeline-icon--tag::after {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translate(4px, -4px) rotate(-28deg);
+}
+
+.timeline-icon--home::before {
+  width: 13px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-top: 0;
+  border-radius: 2px;
+  bottom: 8px;
+}
+
+.timeline-icon--home::after {
+  width: 12px;
+  height: 12px;
+  border-left: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  transform: rotate(45deg);
+  top: 7px;
+}
+
+.timeline-icon--star::before {
+  content: "★";
+  position: static;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.timeline-icon--star::after {
+  content: none;
+}
+
+.timeline-icon--coffee::before {
+  width: 13px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-radius: 2px 2px 6px 6px;
+}
+
+.timeline-icon--coffee::after {
+  width: 6px;
+  height: 6px;
+  border: 2px solid currentColor;
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+  right: 5px;
+}
+
+.timeline-icon--map-pin::before {
+  width: 12px;
+  height: 12px;
+  border-radius: 50% 50% 50% 0;
+  border: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.timeline-icon--map-pin::after {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.timeline-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.timeline-body strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.timeline-subtitle,
+.timeline-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  font-style: normal;
+}
+
+.timeline-item .action-row {
+  margin: 0 0 0 90px;
+}
+
+.action-row,
+.chip-row,
+.ticket-note,
+.resource-row,
+.mode-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tag-chip--soft {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.filter-strip {
+  padding-top: 0;
+}
+
+.filter-chip,
+.jump-chip,
+.mode-chip {
+  min-height: 32px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.map-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+}
+
+.map-surface {
+  overflow: hidden;
+  background: var(--surface-muted);
+}
+
+.map-surface-head {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(0 0 0 / 0.05);
+}
+
+.map-surface-title {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.amap-canvas {
+  width: 100%;
+  height: clamp(300px, 62vh, 420px);
+  background: var(--bg-dim);
+}
+
+.amap-canvas :deep(.amap-marker) {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 3px 10px rgba(197 86 43 / 0.28);
+}
+
+.amap-canvas :deep(.amap-marker--active) {
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(42 122 74 / 0.18), 0 3px 10px rgba(42 122 74 / 0.28);
+}
+
+.amap-overlay-loading,
+.amap-overlay-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(246 236 220 / 0.9);
+  color: var(--ink-secondary);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.amap-overlay-error {
+  color: var(--accent-deep);
+}
+
+.map-footnote {
+  margin: 0;
+  padding: 9px 14px 12px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.map-detail {
+  padding: 16px;
+}
+
+.map-detail-top {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.detail-address,
+.detail-note {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  font-style: normal;
+}
+
+.detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.detail-field strong {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.detail-field a {
+  color: var(--blue);
+  word-break: break-word;
+}
+
+.place-list,
+.ticket-list,
+.transport-list,
+.trip-groups,
+.trip-days {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.place-card {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: 0 2px 10px rgba(26 20 16 / 0.05);
+}
+
+.place-card--active {
+  background: var(--accent-soft);
+}
+
+.place-index {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.place-card--active .place-index {
+  background: var(--accent-deep);
+}
+
+.place-card-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.place-card-body strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.place-card-body span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.alerts-grid,
+.rules-grid {
+  grid-template-columns: 1fr;
+}
+
+.alert-card {
+  padding: 14px;
+  background: var(--accent-soft);
+}
+
+.ticket-block,
+.transport-list {
+  margin: 0;
+}
+
+.section-heading {
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.ticket-card,
+.transport-card {
+  padding: 14px;
+}
+
+.ticket-card--compact {
+  padding: 12px 14px;
+}
+
+.ticket-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ticket-qr {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+}
+
+.ticket-qr-box {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: var(--surface-inverse);
+  color: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.transport-top {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.transport-operator {
+  color: var(--blue);
+}
+
+.transport-times {
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.transport-route {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+}
+
+.rule-card {
+  padding: 14px;
+  background: var(--blue-soft);
+}
+
+.rule-card strong {
+  color: var(--blue);
+}
+
+.resource-row {
+  align-items: stretch;
+}
+
+.resource-card {
+  flex: 1 1 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.resource-card strong {
+  color: var(--blue);
+}
+
+.trip-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+}
+
+.trip-group {
+  overflow: hidden;
+}
+
+.trip-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(0 0 0 / 0.05);
+  background: var(--surface-muted);
+}
+
+.trip-group-head strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.trip-group-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trip-days {
+  padding: 8px;
+}
+
+.trip-day-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.trip-day-card--active {
+  background: var(--accent-soft);
+}
+
+.trip-day-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.trip-day-top strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.trip-day-top span,
+.trip-day-note {
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.empty-ticket {
+  padding: 24px 14px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.bottom-nav {
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: 12px;
+  z-index: 100;
+  width: min(calc(100% - 24px), 560px);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px;
+  border: 0;
+  border-radius: 28px;
+  background: rgba(255 255 255 / 0.94);
+  box-shadow: 0 12px 28px rgba(26 20 16 / 0.16);
+  transform: translateX(-50%);
+  backdrop-filter: blur(18px);
+}
+
+.bottom-nav-item {
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 7px 4px;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+}
+
+.bottom-nav-item--active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.bottom-nav-label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bottom-nav-caption {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.15;
+  opacity: 0.72;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.companion-page button:hover,
+.companion-page a:hover {
+  transform: translateY(-1px);
+}
+
+.companion-page button:active,
+.companion-page a:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 520px) {
+  .companion-page {
+    padding: 12px 12px 106px;
+  }
+
+  .app-header {
+    align-items: flex-start;
+  }
+
+  .app-title {
+    font-size: 21px;
+  }
+
+  .header-actions {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+
+  .weather-link {
+    min-height: 30px;
+    padding: 6px 10px;
+  }
+
+  .summary-grid,
+  .planning-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-card {
+    padding: 10px 6px 6px;
+  }
+
+  .timeline-main {
+    grid-template-columns: 44px 30px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .timeline-item .action-row {
+    margin-left: 82px;
+  }
+
+  .bottom-nav-caption {
+    display: none;
+  }
+
+  .bottom-nav-item {
+    min-height: 44px;
+  }
+
+  .bottom-nav-label {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 380px) {
+  .language-chip {
+    min-width: 42px;
+    padding-inline: 8px;
+  }
+
+  .timeline-item .action-row {
+    margin-left: 0;
+    padding-left: 82px;
+  }
 }
 </style>
