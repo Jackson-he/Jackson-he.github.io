@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
-const API_BASE = (import.meta.env.VITE_FUJI_UPLOAD_API || 'http://127.0.0.1:3312/api/fuji-print').replace(/\/$/, '')
+const API_BASE = (import.meta.env.VITE_FUJI_UPLOAD_API || 'https://www.person-common.top/api/fuji-print').replace(/\/$/, '')
 
 const PRINT_SPEC = {
   paperWidthMm: 100,
