@@ -67,6 +67,14 @@ const projects = [
     size: 'normal',
   },
   {
+    icon: '🖨️',
+    title: '小悄印拼图打印',
+    description: '面向富士小悄印 2 Pro 的 6 寸照片上传、拼图排版、预览和保存工作台。',
+    to: '/projects/fuji-print-studio',
+    gradient: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)',
+    size: 'wide',
+  },
+  {
     icon: '⌘',
     title: 'Codex Chat',
     description: '基于 Codex SDK 的本地聊天工作台，支持历史会话和项目目录上下文。',

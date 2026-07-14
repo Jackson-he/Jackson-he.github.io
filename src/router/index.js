@@ -15,6 +15,7 @@ import ItalyThreePage from '@/pages/Italy-3.vue'
 import CartierPage from '@/pages/CartierPage.vue'
 import WeddingPage from '@/pages/WeddingPage.vue'
 import InvitationPage from '@/pages/Wedding-Invitation-1.vue'
+import FujiPrintStudioPage from '@/pages/FujiPrintStudioPage.vue'
 
 
 const SITE_NAME = '项目展示'
@@ -123,6 +124,16 @@ const routes = [
       title: '工具应用',
       description: '集中展示可独立部署的小工具页，包含股票趋势、期货监控、推文监控、行程地图和 Codex Chat。',
       sharePath: '/projects/tools/',
+    },
+  },
+  {
+    path: '/projects/fuji-print-studio',
+    name: 'fuji-print-studio',
+    component: FujiPrintStudioPage,
+    meta: {
+      title: '小悄印 2 Pro 拼图打印工作台',
+      description: '面向富士小悄印 2 Pro 的 6 寸照片上传、拼图排版、预览和保存工具。',
+      sharePath: '/projects/fuji-print-studio/',
     },
   },
   {

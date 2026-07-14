@@ -33,6 +33,7 @@ export default defineConfig({
         codexChatRedirect: resolve(rootDir, 'projects/codex-chat/index.html'),
         italyTripMapRedirect: resolve(rootDir, 'projects/italy-trip-map/index.html'),
         italyTravelCompanionRedirect: resolve(rootDir, 'projects/italy-travel-companion/index.html'),
+        fujiPrintStudioRedirect: resolve(rootDir, 'projects/fuji-print-studio/index.html'),
       },
     }
   },

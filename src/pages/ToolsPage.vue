@@ -26,6 +26,12 @@ const toolProjects = [
     to: '/projects/twitter-monitor',
   },
   {
+    icon: '🖨️',
+    title: '小悄印拼图打印',
+    description: '为富士小悄印 2 Pro 准备的 6 寸图片上传、拼版预览和排版保存工具。',
+    to: '/projects/fuji-print-studio',
+  },
+  {
     icon: '🗺️',
     title: 'Italy Trip Map',
     description: '把意大利婚纱照行程可视化到高德地图里，支持点位筛选、路线查看和每日节奏概览。',
