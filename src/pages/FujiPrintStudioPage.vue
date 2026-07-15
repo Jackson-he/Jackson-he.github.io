@@ -2,7 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
-const API_BASE = (import.meta.env.VITE_FUJI_UPLOAD_API || 'https://www.person-common.top/api/fuji-print').replace(/\/$/, '')
+ 
+const API_BASE = (window.location.href.indexOf('localhost') === -1 ? 'https://www.person-common.top/api/fuji-print' : 'http://127.0.0.1:3312/api/fuji-print').replace(/\/$/, '')
 const AUTH_TOKEN_KEY = 'fuji-print-auth-token'
 
 const PRINT_SPEC = {
@@ -30,58 +31,412 @@ function makeGridCells(columns, rows) {
   return cells
 }
 
+function makeCell(x, y, w, h, sourceIndex = null) {
+  const cell = { x, y, w, h }
+  if (Number.isInteger(sourceIndex)) {
+    cell.sourceIndex = sourceIndex
+  }
+  return cell
+}
+
+function makeCenteredPhotoCell(widthMm, heightMm) {
+  return makeCell(
+    (PRINT_SPEC.printWidthMm - widthMm) / (PRINT_SPEC.printWidthMm * 2),
+    (PRINT_SPEC.printHeightMm - heightMm) / (PRINT_SPEC.printHeightMm * 2),
+    widthMm / PRINT_SPEC.printWidthMm,
+    heightMm / PRINT_SPEC.printHeightMm,
+  )
+}
+
+function makeLifeFourCells() {
+  const marginX = 0.055
+  const columnGap = 0.05
+  const columnWidth = (1 - marginX * 2 - columnGap) / 2
+  const marginY = 0.035
+  const rowGap = 0.012
+  const rowHeight = (1 - marginY * 2 - rowGap * 3) / 4
+  const cells = []
+
+  for (let row = 0; row < 4; row += 1) {
+    const y = marginY + row * (rowHeight + rowGap)
+    cells.push(makeCell(marginX, y, columnWidth, rowHeight, row))
+    cells.push(makeCell(marginX + columnWidth + columnGap, y, columnWidth, rowHeight, row))
+  }
+  return cells
+}
+
+function getCellSourceIndex(cell, index) {
+  return Number.isInteger(cell.sourceIndex) ? cell.sourceIndex : index
+}
+
+function getTemplateSlotCount(template) {
+  return template.cells.reduce((count, cell, index) => {
+    return Math.max(count, getCellSourceIndex(cell, index) + 1)
+  }, 0)
+}
+
 const layoutTemplates = [
   {
+    id: 'official-3inch',
+    category: '尺寸',
+    name: '3寸',
+    shortName: '3寸',
+    cells: [makeCenteredPhotoCell(55, 84)],
+  },
+  {
+    id: 'official-4inch',
+    category: '尺寸',
+    name: '4寸',
+    shortName: '4寸',
+    cells: [makeCenteredPhotoCell(76, 102)],
+  },
+  {
     id: 'single-full',
-    name: '单张满版',
-    shortName: '1',
-    cells: [{ x: 0, y: 0, w: 1, h: 1 }],
+    category: '尺寸',
+    name: '5寸',
+    shortName: '5寸',
+    cells: [makeCenteredPhotoCell(89, 127)],
+  },
+  {
+    id: 'life-four-strip',
+    category: '人生四格',
+    name: '人生四格',
+    shortName: '四格',
+    cells: makeLifeFourCells(),
   },
   {
     id: 'double-stack',
-    name: '双拼上下',
-    shortName: '2 上下',
+    category: '二拼',
+    name: '上下二拼',
+    shortName: '2-1',
     cells: makeGridCells(1, 2),
   },
   {
     id: 'double-side',
-    name: '双拼左右',
-    shortName: '2 左右',
+    category: '二拼',
+    name: '左右二拼',
+    shortName: '2-2',
     cells: makeGridCells(2, 1),
   },
   {
     id: 'three-poster',
-    name: '三图主次',
-    shortName: '3',
+    category: '三拼',
+    name: '上大下二',
+    shortName: '3-1',
     cells: [
-      { x: 0, y: 0, w: 1, h: 0.62 },
-      { x: 0, y: 0.62, w: 0.5, h: 0.38 },
-      { x: 0.5, y: 0.62, w: 0.5, h: 0.38 },
+      makeCell(0, 0, 1, 0.5),
+      makeCell(0, 0.5, 0.5, 0.5),
+      makeCell(0.5, 0.5, 0.5, 0.5),
     ],
   },
   {
+    id: 'three-left-main',
+    category: '三拼',
+    name: '左大右二',
+    shortName: '3-2',
+    cells: [
+      makeCell(0, 0, 0.5, 1),
+      makeCell(0.5, 0, 0.5, 0.5),
+      makeCell(0.5, 0.5, 0.5, 0.5),
+    ],
+  },
+  {
+    id: 'three-stack',
+    category: '三拼',
+    name: '三横排',
+    shortName: '3-3',
+    cells: makeGridCells(1, 3),
+  },
+  {
+    id: 'three-columns',
+    category: '三拼',
+    name: '三竖排',
+    shortName: '3-4',
+    cells: makeGridCells(3, 1),
+  },
+  {
     id: 'four-grid',
+    category: '四拼',
     name: '四宫格',
-    shortName: '4',
+    shortName: '4-1',
     cells: makeGridCells(2, 2),
   },
   {
+    id: 'four-left-main',
+    category: '四拼',
+    name: '左大右三',
+    shortName: '4-2',
+    cells: [
+      makeCell(0, 0, 0.5, 1),
+      makeCell(0.5, 0, 0.5, 1 / 3),
+      makeCell(0.5, 1 / 3, 0.5, 1 / 3),
+      makeCell(0.5, 2 / 3, 0.5, 1 / 3),
+    ],
+  },
+  {
+    id: 'four-mosaic',
+    category: '四拼',
+    name: '错落四拼',
+    shortName: '4-3',
+    cells: [
+      makeCell(0, 0, 0.42, 0.42),
+      makeCell(0.42, 0, 0.58, 0.42),
+      makeCell(0, 0.42, 0.58, 0.58),
+      makeCell(0.58, 0.42, 0.42, 0.58),
+    ],
+  },
+  {
+    id: 'five-left-two-right-three',
+    category: '五拼',
+    name: '左二右三',
+    shortName: '5-1',
+    cells: [
+      makeCell(0, 0, 0.5, 0.5),
+      makeCell(0, 0.5, 0.5, 0.5),
+      makeCell(0.5, 0, 0.5, 1 / 3),
+      makeCell(0.5, 1 / 3, 0.5, 1 / 3),
+      makeCell(0.5, 2 / 3, 0.5, 1 / 3),
+    ],
+  },
+  {
+    id: 'five-left-three-right-two',
+    category: '五拼',
+    name: '左三右二',
+    shortName: '5-2',
+    cells: [
+      makeCell(0, 0, 0.5, 1 / 3),
+      makeCell(0, 1 / 3, 0.5, 1 / 3),
+      makeCell(0, 2 / 3, 0.5, 1 / 3),
+      makeCell(0.5, 0, 0.5, 0.5),
+      makeCell(0.5, 0.5, 0.5, 0.5),
+    ],
+  },
+  {
+    id: 'five-top-two-bottom-three',
+    category: '五拼',
+    name: '上二下三',
+    shortName: '5-3',
+    cells: [
+      makeCell(0, 0, 0.5, 0.5),
+      makeCell(0.5, 0, 0.5, 0.5),
+      makeCell(0, 0.5, 1 / 3, 0.5),
+      makeCell(1 / 3, 0.5, 1 / 3, 0.5),
+      makeCell(2 / 3, 0.5, 1 / 3, 0.5),
+    ],
+  },
+  {
+    id: 'five-top-three-bottom-two',
+    category: '五拼',
+    name: '上三下二',
+    shortName: '5-4',
+    cells: [
+      makeCell(0, 0, 1 / 3, 0.5),
+      makeCell(1 / 3, 0, 1 / 3, 0.5),
+      makeCell(2 / 3, 0, 1 / 3, 0.5),
+      makeCell(0, 0.5, 0.5, 0.5),
+      makeCell(0.5, 0.5, 0.5, 0.5),
+    ],
+  },
+  {
     id: 'six-grid',
+    category: '六拼',
     name: '六宫格',
-    shortName: '6',
+    shortName: '6-1',
     cells: makeGridCells(2, 3),
   },
   {
+    id: 'six-left-main',
+    category: '六拼',
+    name: '左大右五',
+    shortName: '6-2',
+    cells: [
+      makeCell(0, 0, 0.48, 1),
+      makeCell(0.48, 0, 0.52, 0.2),
+      makeCell(0.48, 0.2, 0.52, 0.2),
+      makeCell(0.48, 0.4, 0.52, 0.2),
+      makeCell(0.48, 0.6, 0.52, 0.2),
+      makeCell(0.48, 0.8, 0.52, 0.2),
+    ],
+  },
+  {
+    id: 'six-three-columns',
+    category: '六拼',
+    name: '三列二行',
+    shortName: '6-3',
+    cells: makeGridCells(3, 2),
+  },
+  {
+    id: 'six-top-two-bottom-four',
+    category: '六拼',
+    name: '上二下四',
+    shortName: '6-4',
+    cells: [
+      makeCell(0, 0, 0.5, 0.5),
+      makeCell(0.5, 0, 0.5, 0.5),
+      makeCell(0, 0.5, 0.25, 0.5),
+      makeCell(0.25, 0.5, 0.25, 0.5),
+      makeCell(0.5, 0.5, 0.25, 0.5),
+      makeCell(0.75, 0.5, 0.25, 0.5),
+    ],
+  },
+  {
+    id: 'seven-top-main',
+    category: '七拼',
+    name: '上大下六',
+    shortName: '7-1',
+    cells: [
+      makeCell(0, 0, 1, 0.28),
+      ...makeGridCells(2, 3).map((cell) => makeCell(cell.x, 0.28 + cell.y * 0.72, cell.w, cell.h * 0.72)),
+    ],
+  },
+  {
+    id: 'seven-left-main',
+    category: '七拼',
+    name: '左大右六',
+    shortName: '7-2',
+    cells: [
+      makeCell(0, 0, 0.32, 1),
+      ...makeGridCells(2, 3).map((cell) => makeCell(0.32 + cell.x * 0.68, cell.y, cell.w * 0.68, cell.h)),
+    ],
+  },
+  {
+    id: 'seven-right-main',
+    category: '七拼',
+    name: '右大左六',
+    shortName: '7-3',
+    cells: [
+      ...makeGridCells(2, 3).map((cell) => makeCell(cell.x * 0.68, cell.y, cell.w * 0.68, cell.h)),
+      makeCell(0.68, 0, 0.32, 1),
+    ],
+  },
+  {
+    id: 'seven-top-three-bottom-four',
+    category: '七拼',
+    name: '上三下四',
+    shortName: '7-4',
+    cells: [
+      ...makeGridCells(3, 1).map((cell) => makeCell(cell.x, 0, cell.w, 0.42)),
+      ...makeGridCells(2, 2).map((cell) => makeCell(cell.x, 0.42 + cell.y * 0.58, cell.w, cell.h * 0.58)),
+    ],
+  },
+  {
+    id: 'seven-left-three-right-four',
+    category: '七拼',
+    name: '左三右四',
+    shortName: '7-5',
+    cells: [
+      ...makeGridCells(1, 3).map((cell) => makeCell(0, cell.y, 0.34, cell.h)),
+      ...makeGridCells(2, 2).map((cell) => makeCell(0.34 + cell.x * 0.66, cell.y, cell.w * 0.66, cell.h)),
+    ],
+  },
+  {
+    id: 'seven-mosaic',
+    category: '七拼',
+    name: '错落七拼',
+    shortName: '7-6',
+    cells: [
+      makeCell(0, 0, 0.42, 0.34),
+      makeCell(0.42, 0, 0.28, 0.34),
+      makeCell(0.7, 0, 0.3, 0.34),
+      makeCell(0, 0.34, 0.33, 0.33),
+      makeCell(0.33, 0.34, 0.34, 0.33),
+      makeCell(0.67, 0.34, 0.33, 0.33),
+      makeCell(0, 0.67, 1, 0.33),
+    ],
+  },
+  {
     id: 'eight-grid',
+    category: '八拼',
     name: '八格竖排',
-    shortName: '8',
+    shortName: '8-1',
     cells: makeGridCells(2, 4),
   },
   {
+    id: 'eight-top-four-bottom-four',
+    category: '八拼',
+    name: '四列二行',
+    shortName: '8-2',
+    cells: makeGridCells(4, 2),
+  },
+  {
+    id: 'eight-mosaic',
+    category: '八拼',
+    name: '错落八拼',
+    shortName: '8-3',
+    cells: [
+      makeCell(0, 0, 0.5, 0.25),
+      makeCell(0.5, 0, 0.5, 0.25),
+      makeCell(0, 0.25, 0.33, 0.25),
+      makeCell(0.33, 0.25, 0.34, 0.25),
+      makeCell(0.67, 0.25, 0.33, 0.25),
+      makeCell(0, 0.5, 0.5, 0.25),
+      makeCell(0.5, 0.5, 0.5, 0.25),
+      makeCell(0, 0.75, 1, 0.25),
+    ],
+  },
+  {
+    id: 'eight-four-columns',
+    category: '八拼',
+    name: '四竖条',
+    shortName: '8-4',
+    cells: [
+      ...makeGridCells(4, 1).map((cell) => makeCell(cell.x, 0, cell.w, 0.5)),
+      ...makeGridCells(4, 1).map((cell) => makeCell(cell.x, 0.5, cell.w, 0.5)),
+    ],
+  },
+  {
+    id: 'eight-left-three-right-five',
+    category: '八拼',
+    name: '左三右五',
+    shortName: '8-5',
+    cells: [
+      ...makeGridCells(1, 3).map((cell) => makeCell(0, cell.y, 0.44, cell.h)),
+      ...makeGridCells(1, 5).map((cell) => makeCell(0.44, cell.y, 0.56, cell.h)),
+    ],
+  },
+  {
     id: 'nine-grid',
+    category: '九拼',
     name: '九宫格',
-    shortName: '9',
+    shortName: '9-1',
     cells: makeGridCells(3, 3),
+  },
+  {
+    id: 'nine-top-three-bottom-six',
+    category: '九拼',
+    name: '上三下六',
+    shortName: '9-2',
+    cells: [
+      ...makeGridCells(3, 1).map((cell) => makeCell(cell.x, 0, cell.w, 0.34)),
+      ...makeGridCells(3, 2).map((cell) => makeCell(cell.x, 0.34 + cell.y * 0.66, cell.w, cell.h * 0.66)),
+    ],
+  },
+  {
+    id: 'nine-center-main',
+    category: '九拼',
+    name: '中心大图',
+    shortName: '9-3',
+    cells: [
+      makeCell(0, 0, 0.25, 0.25),
+      makeCell(0.25, 0, 0.5, 0.25),
+      makeCell(0.75, 0, 0.25, 0.25),
+      makeCell(0, 0.25, 0.25, 0.5),
+      makeCell(0.25, 0.25, 0.5, 0.5),
+      makeCell(0.75, 0.25, 0.25, 0.5),
+      makeCell(0, 0.75, 0.25, 0.25),
+      makeCell(0.25, 0.75, 0.5, 0.25),
+      makeCell(0.75, 0.75, 0.25, 0.25),
+    ],
+  },
+  {
+    id: 'nine-top-four-bottom-five',
+    category: '九拼',
+    name: '上四下五',
+    shortName: '9-4',
+    cells: [
+      ...makeGridCells(4, 1).map((cell) => makeCell(cell.x, 0, cell.w, 0.45)),
+      ...makeGridCells(5, 1).map((cell) => makeCell(cell.x, 0.45, cell.w, 0.55)),
+    ],
   },
 ]
 
@@ -125,6 +480,21 @@ const activeTemplate = computed(() => {
   return layoutTemplates.find((template) => template.id === activeTemplateId.value) || layoutTemplates[0]
 })
 
+const activeTemplateSlotCount = computed(() => getTemplateSlotCount(activeTemplate.value))
+
+const layoutTemplateGroups = computed(() => {
+  const groups = []
+  for (const template of layoutTemplates) {
+    let group = groups.find((item) => item.name === template.category)
+    if (!group) {
+      group = { name: template.category, templates: [] }
+      groups.push(group)
+    }
+    group.templates.push(template)
+  }
+  return groups
+})
+
 const selectedPhotos = computed(() => {
   return selectedPhotoIds.value
     .map((id) => photos.value.find((photo) => photo.id === id))
@@ -141,7 +511,15 @@ const displayedPhotos = computed(() => {
 
 const activeSlotPhoto = computed(() => getCellPhoto(activeSlotIndex.value))
 const activeSlotTransform = computed(() => slotTransforms.value[activeSlotIndex.value] || null)
-const filledSlotCount = computed(() => slotPhotoIds.value.filter(Boolean).length)
+const filledSlotCount = computed(() => {
+  const filledSourceIndexes = new Set()
+  for (const [index, cell] of activeTemplate.value.cells.entries()) {
+    if (slotPhotoIds.value[index]) {
+      filledSourceIndexes.add(getCellSourceIndex(cell, index))
+    }
+  }
+  return filledSourceIndexes.size
+})
 const pageTitle = computed(() => {
   if (activeView.value === 'library') {
     return '照片素材库'
@@ -939,7 +1317,9 @@ function getDefaultTransform() {
 function syncSlots() {
   const previousSlots = slotPhotoIds.value
   const previousTransforms = slotTransforms.value
-  const nextSlots = activeTemplate.value.cells.map((_, index) => selectedPhotoIds.value[index] || null)
+  const nextSlots = activeTemplate.value.cells.map((cell, index) => {
+    return selectedPhotoIds.value[getCellSourceIndex(cell, index)] || null
+  })
 
   slotPhotoIds.value = nextSlots
   slotTransforms.value = nextSlots.map((photoId, index) => {
@@ -1116,7 +1496,7 @@ function formatLayoutTime(layout) {
 
 function layoutPhotoCount(layout) {
   const ids = layout.slotPhotoIds || layout.selectedPhotoIds || []
-  return ids.filter(Boolean).length
+  return new Set(ids.filter(Boolean)).size
 }
 
 function getPhotoLabel(photo) {
@@ -1245,8 +1625,7 @@ async function saveLayout() {
     return
   }
 
-  const localOnlyPhotos = slotPhotoIds.value
-    .filter(Boolean)
+  const localOnlyPhotos = Array.from(new Set(slotPhotoIds.value.filter(Boolean)))
     .map((id) => photos.value.find((photo) => photo.id === id))
     .filter((photo) => photo?.objectUrl || /^blob:/i.test(photo?.url || ''))
   if (localOnlyPhotos.length) {
@@ -1313,7 +1692,7 @@ async function restoreLayout(layoutItem) {
     ? layout.templateId
     : activeTemplateId.value
   const restoredSelectedIds = layout.selectedPhotoIds?.length ? layout.selectedPhotoIds : layout.slotPhotoIds || []
-  selectedPhotoIds.value = restoredSelectedIds.filter((id) => {
+  selectedPhotoIds.value = Array.from(new Set(restoredSelectedIds)).filter((id) => {
     return [...restoredPhotos, ...photos.value].some((photo) => photo.id === id)
   })
   slotPhotoIds.value = layout.slotPhotoIds || []
@@ -1597,19 +1976,37 @@ async function restoreLayout(layoutItem) {
             <div class="fuji-side-section">
               <div class="fuji-side-title">
                 <span>模板</span>
-                <strong>{{ activeTemplate.cells.length }} 格</strong>
+                <strong>{{ activeTemplateSlotCount }} 格</strong>
               </div>
-              <div class="fuji-template-grid">
-                <button
-                  v-for="template in layoutTemplates"
-                  :key="template.id"
-                  type="button"
-                  :class="{ 'is-active': activeTemplateId === template.id }"
-                  @click="activeTemplateId = template.id"
+              <div class="fuji-template-groups">
+                <section
+                  v-for="group in layoutTemplateGroups"
+                  :key="group.name"
+                  class="fuji-template-group"
                 >
-                  <span>{{ template.shortName }}</span>
-                  <strong>{{ template.name }}</strong>
-                </button>
+                  <h3>{{ group.name }}</h3>
+                  <div class="fuji-template-grid">
+                    <button
+                      v-for="template in group.templates"
+                      :key="template.id"
+                      type="button"
+                      :class="{ 'is-active': activeTemplateId === template.id }"
+                      @click="activeTemplateId = template.id"
+                    >
+                      <span class="fuji-template-preview" aria-hidden="true">
+                        <i
+                          v-for="(cell, index) in template.cells"
+                          :key="`${template.id}-preview-${index}`"
+                          :style="cellBoxStyle(cell)"
+                        ></i>
+                      </span>
+                      <span class="fuji-template-copy">
+                        <small>{{ template.shortName }}</small>
+                        <strong>{{ template.name }}</strong>
+                      </span>
+                    </button>
+                  </div>
+                </section>
               </div>
             </div>
 
@@ -1704,14 +2101,14 @@ async function restoreLayout(layoutItem) {
                     :style="imageStyle(index)"
                     draggable="false"
                   >
-                  <span v-else>{{ index + 1 }}</span>
+                  <span v-else>{{ getCellSourceIndex(cell, index) + 1 }}</span>
                 </div>
               </div>
             </div>
             <div class="fuji-paper-meta">
               <span>打印区 {{ PRINT_SPEC.printWidthMm }}×{{ PRINT_SPEC.printHeightMm }}mm</span>
               <span>相纸 {{ PRINT_SPEC.paperWidthMm }}×{{ PRINT_SPEC.paperHeightMm }}mm</span>
-              <span>{{ filledSlotCount }}/{{ activeTemplate.cells.length }}</span>
+              <span>{{ filledSlotCount }}/{{ activeTemplateSlotCount }}</span>
             </div>
           </section>
         </div>
@@ -2408,6 +2805,23 @@ async function restoreLayout(layoutItem) {
   color: #17201d;
 }
 
+.fuji-template-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.fuji-template-group {
+  display: grid;
+  gap: 8px;
+}
+
+.fuji-template-group h3 {
+  margin: 0;
+  color: #5e6e69;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .fuji-template-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2415,13 +2829,17 @@ async function restoreLayout(layoutItem) {
 }
 
 .fuji-template-grid button {
-  min-height: 70px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 76px;
   border: 1px solid #dce4e1;
   border-radius: 8px;
   background: #fbfcfb;
   color: #17201d;
   text-align: left;
-  padding: 10px;
+  padding: 8px;
 }
 
 .fuji-template-grid button.is-active {
@@ -2429,21 +2847,41 @@ async function restoreLayout(layoutItem) {
   box-shadow: inset 0 0 0 1px #d9553d;
 }
 
-.fuji-template-grid button span {
-  display: inline-flex;
-  min-width: 36px;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
+.fuji-template-preview {
+  position: relative;
+  display: block;
+  width: 38px;
+  aspect-ratio: 100 / 148;
+  overflow: hidden;
+  border: 1px solid #d5ddd9;
   border-radius: 6px;
-  margin-bottom: 7px;
-  background: #eef3f1;
+  background: #f1f4f2;
+}
+
+.fuji-template-preview i {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  background: #aeb8b3;
+}
+
+.fuji-template-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fuji-template-copy small {
   color: #2f7d68;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
 .fuji-template-grid button strong {
   display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.84rem;
 }
 
