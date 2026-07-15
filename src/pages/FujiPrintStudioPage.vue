@@ -111,6 +111,7 @@ const PHOTO_ORDER_KEY = 'fuji-print-photo-order'
 const MAX_UPLOAD_CONCURRENCY = 2
 const UPLOAD_RETRY_LIMIT = 2
 const UPLOAD_TIMEOUT_MS = 120000
+const UPLOAD_CHUNK_BYTES = 768 * 1024
 
 const activeTemplate = computed(() => {
   return layoutTemplates.find((template) => template.id === activeTemplateId.value) || layoutTemplates[0]
@@ -298,11 +299,12 @@ function mapUploadedFile(file) {
     type: file.mimeType || 'image/*',
     url: absoluteBackendUrl(file.url),
     objectUrl: '',
-    width: 0,
-    height: 0,
-    status: '已上传',
-    uploadedAt: file.uploadedAt || '',
-  }
+      width: 0,
+      height: 0,
+      status: '已上传',
+      uploadProgress: null,
+      uploadedAt: file.uploadedAt || '',
+    }
 }
 
 function decodeMaybeUtf8Mojibake(value) {
@@ -353,6 +355,7 @@ async function addFiles(files) {
       width: 0,
       height: 0,
       status: '本地预览',
+      uploadProgress: 0,
       uploadedAt: new Date().toISOString(),
     }
     photo.objectUrl = photo.url
@@ -381,6 +384,7 @@ function loadImageSize(photo) {
 
 function enqueueUpload(photo, file) {
   photo.status = '等待上传'
+  setUploadProgress(photo, 0)
   uploadQueue.value.push({ photo, file, attempt: 0 })
   processUploadQueue()
 }
@@ -404,65 +408,142 @@ async function runUploadJob(job) {
 
   try {
     photo.status = attempt ? `重试上传 ${attempt}/${UPLOAD_RETRY_LIMIT}` : '准备上传'
+    setUploadProgress(photo, 0)
     await uploadPhoto(photo, file, attempt)
   } catch (error) {
     if (attempt < UPLOAD_RETRY_LIMIT && photos.value.includes(photo)) {
       photo.status = `等待重试 ${attempt + 1}/${UPLOAD_RETRY_LIMIT}`
+      setUploadProgress(photo, 0)
       await sleep(900 * (attempt + 1))
       await runUploadJob({ photo, file, attempt: attempt + 1 })
       return
     }
 
     photo.status = getUploadErrorMessage(error)
+    photo.uploadProgress = null
   }
 }
 
 async function uploadPhoto(photo, file, attempt) {
+  if (file.size > UPLOAD_CHUNK_BYTES) {
+    await uploadChunkedPhoto(photo, file, attempt)
+    return
+  }
+
+  await uploadDirectPhoto(photo, file, attempt)
+}
+
+async function uploadDirectPhoto(photo, file, attempt) {
   const formData = new FormData()
   formData.append('file', file, file.name)
   formData.append('originalName', file.name)
-  const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => {
-    controller.abort()
-  }, UPLOAD_TIMEOUT_MS)
 
-  try {
-    photo.status = attempt ? `上传中 · 第 ${attempt + 1} 次` : '上传中'
-    const response = await fetch(`${API_BASE}/uploads`, {
-      method: 'POST',
-      body: formData,
-      signal: controller.signal,
+  photo.status = attempt ? `上传中 · 第 ${attempt + 1} 次` : '上传中'
+  const payload = await uploadFormData(`${API_BASE}/uploads`, formData, (loaded, total) => {
+    if (total) {
+      setUploadProgress(photo, (loaded / total) * 100)
+    }
+  })
+
+  const uploaded = payload.files?.[0]
+  if (!uploaded) {
+    throw new Error('empty upload response')
+  }
+
+  applyUploadedPhoto(photo, uploaded)
+}
+
+async function uploadChunkedPhoto(photo, file, attempt) {
+  const uploadId = crypto.randomUUID()
+  const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_BYTES)
+  let uploaded = null
+
+  for (let index = 0; index < totalChunks; index += 1) {
+    const start = index * UPLOAD_CHUNK_BYTES
+    const end = Math.min(start + UPLOAD_CHUNK_BYTES, file.size)
+    const chunk = file.slice(start, end, file.type || 'application/octet-stream')
+    const formData = new FormData()
+    formData.append('uploadId', uploadId)
+    formData.append('chunkIndex', String(index))
+    formData.append('totalChunks', String(totalChunks))
+    formData.append('originalName', file.name)
+    formData.append('mimeType', file.type || 'application/octet-stream')
+    formData.append('chunk', chunk, `${file.name}.part-${index}`)
+
+    const baseLoaded = start
+    photo.status = attempt ? `分片上传 · 第 ${attempt + 1} 次` : '分片上传'
+    const payload = await uploadFormData(`${API_BASE}/uploads/chunks`, formData, (loaded) => {
+      setUploadProgress(photo, ((baseLoaded + loaded) / file.size) * 100)
     })
 
-    if (!response.ok) {
-      throw new Error('upload_failed')
+    if (payload.complete) {
+      uploaded = payload.files?.[0]
     }
-
-    const payload = await response.json()
-    const uploaded = payload.files?.[0]
-    if (!uploaded) {
-      throw new Error('empty upload response')
-    }
-
-    const previousId = photo.id
-    const previousObjectUrl = photo.objectUrl
-    const uploadedPhoto = mapUploadedFile(uploaded)
-    Object.assign(photo, uploadedPhoto)
-    selectedPhotoIds.value = selectedPhotoIds.value.map((id) => (id === previousId ? photo.id : id))
-    slotPhotoIds.value = slotPhotoIds.value.map((id) => (id === previousId ? photo.id : id))
-    if (previousObjectUrl) {
-      URL.revokeObjectURL(previousObjectUrl)
-    }
-    loadImageSize(photo)
-    persistPhotoOrder()
-  } finally {
-    window.clearTimeout(timeoutId)
   }
+
+  if (!uploaded) {
+    throw new Error('empty upload response')
+  }
+
+  applyUploadedPhoto(photo, uploaded)
+}
+
+function applyUploadedPhoto(photo, uploaded) {
+  const previousId = photo.id
+  const previousObjectUrl = photo.objectUrl
+  const uploadedPhoto = mapUploadedFile(uploaded)
+  Object.assign(photo, uploadedPhoto)
+  photo.uploadProgress = null
+  selectedPhotoIds.value = selectedPhotoIds.value.map((id) => (id === previousId ? photo.id : id))
+  slotPhotoIds.value = slotPhotoIds.value.map((id) => (id === previousId ? photo.id : id))
+  if (previousObjectUrl) {
+    URL.revokeObjectURL(previousObjectUrl)
+  }
+  loadImageSize(photo)
+  persistPhotoOrder()
+}
+
+function uploadFormData(url, formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', url)
+    xhr.timeout = UPLOAD_TIMEOUT_MS
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress?.(event.loaded, event.total)
+      }
+    }
+
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`upload_failed_${xhr.status}`))
+        return
+      }
+
+      try {
+        resolve(JSON.parse(xhr.responseText || '{}'))
+      } catch {
+        reject(new Error('invalid upload response'))
+      }
+    }
+    xhr.onerror = () => reject(new Error('network_error'))
+    xhr.ontimeout = () => reject(Object.assign(new Error('upload_timeout'), { name: 'AbortError' }))
+    xhr.onabort = () => reject(Object.assign(new Error('upload_aborted'), { name: 'AbortError' }))
+    xhr.send(formData)
+  })
+}
+
+function setUploadProgress(photo, value) {
+  photo.uploadProgress = clamp(Math.round(value), 0, 100)
 }
 
 function getUploadErrorMessage(error) {
   if (error?.name === 'AbortError') {
     return '上传超时，保留本地预览'
+  }
+  if (String(error?.message || '').includes('413')) {
+    return '服务器限制单次请求，保留本地预览'
   }
   return '上传失败，保留本地预览'
 }
@@ -844,6 +925,26 @@ function photoMeta(photo) {
   return `${dimensions} · ${formatSize(photo.size)}`
 }
 
+function shouldShowPhotoStatus(photo) {
+  return /失败|超时|限制/.test(photo.status || '')
+}
+
+function shouldShowUploadProgress(photo) {
+  return photo.uploadProgress !== null
+    && photo.uploadProgress !== undefined
+    && Number.isFinite(Number(photo.uploadProgress))
+    && !shouldShowPhotoStatus(photo)
+}
+
+function uploadProgressValue(photo) {
+  return clamp(Number(photo.uploadProgress) || 0, 0, 100)
+}
+
+function uploadProgressText(photo) {
+  const progress = uploadProgressValue(photo)
+  return progress ? `${progress}%` : '等待'
+}
+
 function formatLayoutTime(layout) {
   const rawValue = layout.savedAt || layout.createdAt
   if (!rawValue) {
@@ -1161,9 +1262,25 @@ async function restoreLayout(layoutItem) {
           @drop.prevent="dropWallPhoto(photo)"
           @dragend="clearWallDragState"
         >
-          <img :src="photo.url" :alt="photo.name" loading="lazy" draggable="false">
+          <div class="fuji-photo-thumb">
+            <img :src="photo.url" :alt="photo.name" loading="lazy" draggable="false">
+            <div
+              v-if="shouldShowUploadProgress(photo)"
+              class="fuji-upload-progress"
+              role="progressbar"
+              aria-label="上传进度"
+              :aria-valuenow="uploadProgressValue(photo)"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <span>{{ uploadProgressText(photo) }}</span>
+              <div>
+                <i :style="{ width: `${uploadProgressValue(photo)}%` }"></i>
+              </div>
+            </div>
+          </div>
           <span v-if="getPhotoLabel(photo)" class="fuji-pick-order">{{ getPhotoLabel(photo) }}</span>
-          <span class="fuji-photo-status">{{ photo.status }}</span>
+          <span v-if="shouldShowPhotoStatus(photo)" class="fuji-photo-status">{{ photo.status }}</span>
           <button
             type="button"
             class="fuji-delete-btn"
@@ -1179,7 +1296,7 @@ async function restoreLayout(layoutItem) {
               <path d="M14 11v6" />
             </svg>
           </button>
-          <button
+          <!-- <button
             type="button"
             class="fuji-drag-handle"
             aria-label="拖动排序"
@@ -1190,7 +1307,7 @@ async function restoreLayout(layoutItem) {
             @pointercancel.stop.prevent="clearWallDragState"
           >
             ≡
-          </button>
+          </button> -->
           <strong>{{ photo.name }}</strong>
           <small>{{ photoMeta(photo) }}</small>
         </article>
@@ -1622,12 +1739,56 @@ async function restoreLayout(layoutItem) {
   pointer-events: none;
 }
 
-.fuji-photo-tile img {
+.fuji-photo-thumb {
+  position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
   border-radius: 6px;
-  object-fit: cover;
   background: #dce5e1;
+  overflow: hidden;
+}
+
+.fuji-photo-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fuji-upload-progress {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 6px;
+  border-radius: 6px;
+  background: rgba(23, 32, 29, 0.74);
+  color: #ffffff;
+  font-size: 0.72rem;
+  line-height: 1;
+  box-shadow: 0 8px 18px rgba(23, 32, 29, 0.18);
+}
+
+.fuji-upload-progress span {
+  font-weight: 700;
+}
+
+.fuji-upload-progress div {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.fuji-upload-progress i {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  border-radius: inherit;
+  background: #79d2b6;
+  transition: width 0.18s ease;
 }
 
 .fuji-photo-tile strong,
