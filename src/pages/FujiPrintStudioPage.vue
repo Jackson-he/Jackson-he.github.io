@@ -96,11 +96,11 @@ const activeView = ref('library')
 const isExporting = ref(false)
 const saveState = ref('待保存')
 const libraryState = ref('加载素材库')
+const layoutWallState = ref('加载排版')
 const searchText = ref('')
 const savedLayouts = ref(loadSavedLayouts())
 const wallDragPhotoId = ref('')
 const wallDropPhotoId = ref('')
-const previewPhotoId = ref('')
 const suppressNextTileClick = ref(false)
 const wallPointerDrag = ref(null)
 const deletingPhotoIds = ref(new Set())
@@ -130,13 +130,18 @@ const displayedPhotos = computed(() => {
   return photos.value.filter((photo) => photo.name.toLowerCase().includes(keyword))
 })
 
-const previewPhoto = computed(() => {
-  return photos.value.find((photo) => photo.id === previewPhotoId.value) || null
-})
-
 const activeSlotPhoto = computed(() => getCellPhoto(activeSlotIndex.value))
 const activeSlotTransform = computed(() => slotTransforms.value[activeSlotIndex.value] || null)
 const filledSlotCount = computed(() => slotPhotoIds.value.filter(Boolean).length)
+const pageTitle = computed(() => {
+  if (activeView.value === 'library') {
+    return '照片素材库'
+  }
+  if (activeView.value === 'layout-wall') {
+    return '排版墙'
+  }
+  return '排版预览'
+})
 const printSummary = computed(() => {
   return `${PRINT_SPEC.printWidthMm}×${PRINT_SPEC.printHeightMm}mm · ${PRINT_SPEC.dpi}dpi · ${PRINT_SPEC.pixelWidth}×${PRINT_SPEC.pixelHeight}px`
 })
@@ -155,6 +160,7 @@ watch([activeTemplateId, selectedPhotoIds], () => {
 onMounted(() => {
   syncSlots()
   loadRemotePhotos()
+  loadRemoteLayouts()
 })
 
 onBeforeUnmount(() => {
@@ -180,6 +186,39 @@ function persistSavedLayouts() {
     savedLayouts.value = savedLayouts.value.slice(0, 3)
     localStorage.setItem('fuji-print-layouts', JSON.stringify(savedLayouts.value))
   }
+}
+
+function normalizeLayoutRecord(layout) {
+  const savedAt = layout.savedAt || layout.createdAt || ''
+  return {
+    ...layout,
+    id: layout.id || crypto.randomUUID(),
+    name: layout.name || `${layout.templateName || '排版'} · ${formatLayoutTime({ savedAt })}`,
+    templateName: layout.templateName || '排版',
+    thumbnailDataUrl: layout.thumbnailDataUrl || '',
+    savedAt,
+    createdAt: layout.createdAt || savedAt,
+  }
+}
+
+function mergeLayouts(primaryLayouts, fallbackLayouts = []) {
+  const layoutMap = new Map()
+  for (const layout of fallbackLayouts.map(normalizeLayoutRecord)) {
+    layoutMap.set(layout.id, layout)
+  }
+  for (const layout of primaryLayouts.map(normalizeLayoutRecord)) {
+    layoutMap.set(layout.id, { ...(layoutMap.get(layout.id) || {}), ...layout })
+  }
+
+  return Array.from(layoutMap.values()).sort((left, right) => {
+    return String(right.savedAt || right.createdAt).localeCompare(String(left.savedAt || left.createdAt))
+  })
+}
+
+function upsertSavedLayout(layout) {
+  savedLayouts.value = mergeLayouts([layout], savedLayouts.value)
+  layoutWallState.value = `${savedLayouts.value.length} 个排版`
+  persistSavedLayouts()
 }
 
 function absoluteBackendUrl(path) {
@@ -217,6 +256,37 @@ async function loadRemotePhotos() {
   } catch {
     libraryState.value = photos.value.length ? `${photos.value.length} 张本地素材` : '素材库离线'
   }
+}
+
+async function loadRemoteLayouts() {
+  layoutWallState.value = '加载排版'
+  try {
+    const response = await fetch(`${API_BASE}/layouts`, { cache: 'no-store' })
+    if (!response.ok) {
+      throw new Error('load layouts failed')
+    }
+
+    const payload = await response.json()
+    const remoteLayouts = (payload.layouts || []).map(normalizeLayoutRecord)
+    savedLayouts.value = mergeLayouts(remoteLayouts, savedLayouts.value)
+    layoutWallState.value = savedLayouts.value.length ? `${savedLayouts.value.length} 个排版` : '暂无排版'
+  } catch {
+    layoutWallState.value = savedLayouts.value.length ? `${savedLayouts.value.length} 个本机草稿` : '排版墙离线'
+  }
+}
+
+async function fetchLayoutDetail(layout) {
+  if (layout.photos && layout.templateId) {
+    return layout
+  }
+
+  const response = await fetch(`${API_BASE}/layouts/${encodeURIComponent(layout.id)}`, { cache: 'no-store' })
+  if (!response.ok) {
+    throw new Error('layout not found')
+  }
+
+  const payload = await response.json()
+  return normalizeLayoutRecord(payload.layout || layout)
 }
 
 function mapUploadedFile(file) {
@@ -470,20 +540,9 @@ function removePhotoFromClient(photoId) {
   photos.value = photos.value.filter((item) => item.id !== photoId)
   selectedPhotoIds.value = selectedPhotoIds.value.filter((id) => id !== photoId)
   slotPhotoIds.value = slotPhotoIds.value.map((id) => (id === photoId ? null : id))
-  if (previewPhotoId.value === photoId) {
-    previewPhotoId.value = ''
-  }
   persistPhotoOrder()
   syncSlots()
   libraryState.value = `${photos.value.length} 张素材`
-}
-
-function openPhotoPreview(photo) {
-  previewPhotoId.value = photo.id
-}
-
-function closePhotoPreview() {
-  previewPhotoId.value = ''
 }
 
 function startWallDrag(event, photo) {
@@ -637,6 +696,11 @@ function showLibrary() {
   activeView.value = 'library'
 }
 
+function showLayoutWall() {
+  activeView.value = 'layout-wall'
+  loadRemoteLayouts()
+}
+
 function getDefaultTransform() {
   return { scale: 1, x: 50, y: 50 }
 }
@@ -780,6 +844,30 @@ function photoMeta(photo) {
   return `${dimensions} · ${formatSize(photo.size)}`
 }
 
+function formatLayoutTime(layout) {
+  const rawValue = layout.savedAt || layout.createdAt
+  if (!rawValue) {
+    return '未记录时间'
+  }
+
+  const date = new Date(rawValue)
+  if (Number.isNaN(date.getTime())) {
+    return '未记录时间'
+  }
+
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function layoutPhotoCount(layout) {
+  const ids = layout.slotPhotoIds || layout.selectedPhotoIds || []
+  return ids.filter(Boolean).length
+}
+
 function getPhotoLabel(photo) {
   const index = selectedPhotoIds.value.indexOf(photo.id)
   return index >= 0 ? index + 1 : ''
@@ -867,6 +955,11 @@ async function downloadComposite() {
 }
 
 function buildLayoutRecord(thumbnailDataUrl) {
+  const layoutPhotoIds = Array.from(new Set(slotPhotoIds.value.filter(Boolean)))
+  const layoutPhotos = layoutPhotoIds
+    .map((id) => photos.value.find((photo) => photo.id === id))
+    .filter(Boolean)
+
   return {
     id: crypto.randomUUID(),
     name: `${activeTemplate.value.name} · ${new Date().toLocaleString('zh-CN')}`,
@@ -874,10 +967,10 @@ function buildLayoutRecord(thumbnailDataUrl) {
     templateId: activeTemplateId.value,
     templateName: activeTemplate.value.name,
     printSpec: PRINT_SPEC,
-    selectedPhotoIds: [...selectedPhotoIds.value],
+    selectedPhotoIds: layoutPhotoIds,
     slotPhotoIds: [...slotPhotoIds.value],
     slotTransforms: slotTransforms.value.map((transform) => ({ ...transform })),
-    photos: photos.value.map((photo) => ({
+    photos: layoutPhotos.map((photo) => ({
       id: photo.id,
       serverId: photo.serverId || '',
       name: photo.name,
@@ -892,16 +985,23 @@ function buildLayoutRecord(thumbnailDataUrl) {
 }
 
 async function saveLayout() {
-  if (!selectedPhotoIds.value.length) {
+  if (!filledSlotCount.value) {
     saveState.value = '未选择照片'
+    return
+  }
+
+  const localOnlyPhotos = slotPhotoIds.value
+    .filter(Boolean)
+    .map((id) => photos.value.find((photo) => photo.id === id))
+    .filter((photo) => photo?.objectUrl || /^blob:/i.test(photo?.url || ''))
+  if (localOnlyPhotos.length) {
+    saveState.value = `等待 ${localOnlyPhotos.length} 张照片上传完成`
     return
   }
 
   saveState.value = '保存中'
   const thumbnailDataUrl = await renderComposite(420)
   const record = buildLayoutRecord(thumbnailDataUrl)
-  savedLayouts.value = [record, ...savedLayouts.value].slice(0, 8)
-  persistSavedLayouts()
 
   try {
     const response = await fetch(`${API_BASE}/layouts`, {
@@ -909,27 +1009,48 @@ async function saveLayout() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(record),
     })
-    saveState.value = response.ok ? '已保存' : '已保存到本机'
+    if (!response.ok) {
+      throw new Error('save layout failed')
+    }
+
+    const payload = await response.json()
+    upsertSavedLayout(normalizeLayoutRecord(payload.layout || record))
+    saveState.value = '已保存到后台'
   } catch {
-    saveState.value = '已保存到本机'
+    upsertSavedLayout(record)
+    saveState.value = '后台保存失败，已保留本机草稿'
   }
 }
 
-function restoreLayout(layout) {
+async function restoreLayout(layoutItem) {
+  layoutWallState.value = '打开排版'
+  let layout
+  try {
+    layout = await fetchLayoutDetail(layoutItem)
+  } catch {
+    layoutWallState.value = '排版加载失败'
+    saveState.value = '排版加载失败'
+    return
+  }
+
   const existingIds = new Set(photos.value.map((photo) => photo.id))
   const restoredPhotos = (layout.photos || [])
     .filter((photo) => !existingIds.has(photo.id))
     .map((photo) => ({
       ...photo,
+      url: absoluteBackendUrl(photo.url),
       objectUrl: '',
       type: 'image/*',
       status: photo.status || '已载入',
-      uploadedAt: layout.createdAt,
+      uploadedAt: layout.savedAt || layout.createdAt,
     }))
 
   photos.value = [...restoredPhotos, ...photos.value]
-  activeTemplateId.value = layout.templateId
-  selectedPhotoIds.value = (layout.selectedPhotoIds || []).filter((id) => {
+  activeTemplateId.value = layoutTemplates.some((template) => template.id === layout.templateId)
+    ? layout.templateId
+    : activeTemplateId.value
+  const restoredSelectedIds = layout.selectedPhotoIds?.length ? layout.selectedPhotoIds : layout.slotPhotoIds || []
+  selectedPhotoIds.value = restoredSelectedIds.filter((id) => {
     return [...restoredPhotos, ...photos.value].some((photo) => photo.id === id)
   })
   slotPhotoIds.value = layout.slotPhotoIds || []
@@ -939,7 +1060,8 @@ function restoreLayout(layout) {
     y: transform.y ?? 50,
   }))
   photos.value.forEach(loadImageSize)
-  saveState.value = '已载入草稿'
+  saveState.value = '已载入排版'
+  layoutWallState.value = savedLayouts.value.length ? `${savedLayouts.value.length} 个排版` : '暂无排版'
   openLayout()
 }
 </script>
@@ -949,7 +1071,7 @@ function restoreLayout(layout) {
     <header class="fuji-topbar">
       <div class="fuji-title-block">
         <p>FUJIFILM 小悄印 2 Pro</p>
-        <h1>{{ activeView === 'library' ? '照片素材库' : '排版预览' }}</h1>
+        <h1>{{ pageTitle }}</h1>
       </div>
       <div class="fuji-top-actions">
         <button
@@ -959,6 +1081,14 @@ function restoreLayout(layout) {
           @click="showLibrary"
         >
           照片墙
+        </button>
+        <button
+          type="button"
+          class="fuji-view-btn"
+          :class="{ 'is-active': activeView === 'layout-wall' }"
+          @click="showLayoutWall"
+        >
+          排版墙 {{ savedLayouts.length }}
         </button>
         <button
           type="button"
@@ -1010,23 +1140,6 @@ function restoreLayout(layout) {
         </button>
       </div>
 
-      <section v-if="previewPhoto" class="fuji-photo-preview">
-        <div class="fuji-preview-image-wrap">
-          <img :src="previewPhoto.url" :alt="previewPhoto.name">
-        </div>
-        <div class="fuji-preview-info">
-          <p>预览</p>
-          <h2>{{ previewPhoto.name }}</h2>
-          <span>{{ photoMeta(previewPhoto) }}</span>
-          <div class="fuji-preview-actions">
-            <button type="button" class="fuji-primary-btn" @click="togglePhoto(previewPhoto)">
-              {{ selectedPhotoIds.includes(previewPhoto.id) ? '取消选择' : '选择照片' }}
-            </button>
-            <button type="button" class="fuji-text-btn" @click="closePhotoPreview">关闭预览</button>
-          </div>
-        </div>
-      </section>
-
       <div v-if="displayedPhotos.length" class="fuji-photo-wall">
         <article
           v-for="photo in displayedPhotos"
@@ -1041,7 +1154,6 @@ function restoreLayout(layout) {
           }"
           draggable="true"
           @click="togglePhoto(photo)"
-          @dblclick.stop="openPhotoPreview(photo)"
           @dragstart="startWallDrag($event, photo)"
           @dragenter.prevent="enterWallDrop(photo)"
           @dragover.prevent="enterWallDrop(photo)"
@@ -1079,12 +1191,6 @@ function restoreLayout(layout) {
           >
             ≡
           </button>
-          <button type="button" class="fuji-preview-btn" aria-label="预览照片" @click.stop="openPhotoPreview(photo)">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </button>
           <strong>{{ photo.name }}</strong>
           <small>{{ photoMeta(photo) }}</small>
         </article>
@@ -1093,6 +1199,46 @@ function restoreLayout(layout) {
       <div v-else class="fuji-empty">
         <strong>还没有照片</strong>
         <button type="button" @click="triggerUpload">上传第一批图片</button>
+      </div>
+    </section>
+
+    <section
+      v-else-if="activeView === 'layout-wall'"
+      class="fuji-layout-wall-page"
+    >
+      <div class="fuji-layout-wall-toolbar">
+        <div class="fuji-layout-wall-title">
+          <span>{{ layoutWallState }}</span>
+          <strong>已保存排版</strong>
+        </div>
+        <button type="button" class="fuji-text-btn" @click="loadRemoteLayouts">刷新</button>
+      </div>
+
+      <div v-if="savedLayouts.length" class="fuji-layout-wall-grid">
+        <button
+          v-for="layout in savedLayouts"
+          :key="layout.id"
+          type="button"
+          class="fuji-layout-card"
+          @click="restoreLayout(layout)"
+        >
+          <img
+            v-if="layout.thumbnailDataUrl"
+            :src="layout.thumbnailDataUrl"
+            :alt="layout.name"
+            loading="lazy"
+          >
+          <span v-else class="fuji-layout-card-placeholder">排版</span>
+          <strong>{{ layout.name }}</strong>
+          <small>
+            {{ layout.templateName }} · {{ layoutPhotoCount(layout) || '-' }} 张 · {{ formatLayoutTime(layout) }}
+          </small>
+        </button>
+      </div>
+
+      <div v-else class="fuji-empty">
+        <strong>还没有保存的排版</strong>
+        <button type="button" @click="openLayout">去排版</button>
       </div>
     </section>
 
@@ -1110,6 +1256,7 @@ function restoreLayout(layout) {
               </div>
               <div class="fuji-layout-actions">
                 <button type="button" class="fuji-text-btn" @click="showLibrary">照片墙</button>
+                <button type="button" class="fuji-text-btn" @click="showLayoutWall">排版墙</button>
                 <button type="button" class="fuji-text-btn" :disabled="isExporting" @click="downloadComposite">
                   {{ isExporting ? '导出中' : '导出 PNG' }}
                 </button>
@@ -1195,7 +1342,8 @@ function restoreLayout(layout) {
                   type="button"
                   @click="restoreLayout(layout)"
                 >
-                  <img :src="layout.thumbnailDataUrl" :alt="layout.name">
+                  <img v-if="layout.thumbnailDataUrl" :src="layout.thumbnailDataUrl" :alt="layout.name">
+                  <span v-else class="fuji-draft-placeholder">排</span>
                   <span>{{ layout.templateName }}</span>
                 </button>
               </div>
@@ -1273,8 +1421,8 @@ function restoreLayout(layout) {
 .fuji-upload-btn,
 .fuji-delete-btn,
 .fuji-drag-handle,
-.fuji-preview-btn,
 .fuji-photo-tile,
+.fuji-layout-card,
 .fuji-template-grid button,
 .fuji-selected-strip button,
 .fuji-adjust-actions button,
@@ -1313,6 +1461,7 @@ function restoreLayout(layout) {
 .fuji-top-actions,
 .fuji-layout-actions,
 .fuji-library-toolbar,
+.fuji-layout-wall-toolbar,
 .fuji-paper-meta {
   display: flex;
   align-items: center;
@@ -1325,7 +1474,7 @@ function restoreLayout(layout) {
 .fuji-upload-btn,
 .fuji-delete-btn,
 .fuji-drag-handle,
-.fuji-preview-btn,
+.fuji-layout-card,
 .fuji-empty button {
   border: 0;
   border-radius: 6px;
@@ -1423,66 +1572,6 @@ function restoreLayout(layout) {
   padding: 5px 9px;
   background: #edf4f1;
   color: #2f7d68;
-}
-
-.fuji-photo-preview {
-  display: grid;
-  grid-template-columns: minmax(260px, 420px) minmax(0, 1fr);
-  gap: 16px;
-  margin: 14px;
-  padding: 12px;
-  border: 1px solid #dce4e1;
-  border-radius: 8px;
-  background: #f8faf9;
-}
-
-.fuji-preview-image-wrap {
-  display: grid;
-  place-items: center;
-  min-height: 280px;
-  border-radius: 6px;
-  background: #e8efec;
-  overflow: hidden;
-}
-
-.fuji-preview-image-wrap img {
-  display: block;
-  width: 100%;
-  max-height: 520px;
-  object-fit: contain;
-}
-
-.fuji-preview-info {
-  display: grid;
-  align-content: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.fuji-preview-info p,
-.fuji-preview-info h2 {
-  margin: 0;
-}
-
-.fuji-preview-info p {
-  color: #6b7874;
-  font-size: 0.78rem;
-}
-
-.fuji-preview-info h2 {
-  overflow-wrap: anywhere;
-  font-size: clamp(1.2rem, 3vw, 2rem);
-}
-
-.fuji-preview-info span {
-  color: #687a75;
-}
-
-.fuji-preview-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 8px;
 }
 
 .fuji-photo-wall {
@@ -1635,38 +1724,6 @@ function restoreLayout(layout) {
   box-shadow: 0 6px 16px rgba(23, 32, 29, 0.16);
 }
 
-.fuji-preview-btn {
-  position: absolute;
-  right: 14px;
-  bottom: 56px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  min-height: 30px;
-  padding: 0;
-  background: rgba(255, 255, 255, 0.9);
-  color: #17201d;
-  border: 1px solid rgba(23, 32, 29, 0.12);
-  box-shadow: 0 6px 16px rgba(23, 32, 29, 0.16);
-}
-
-.fuji-preview-btn:hover {
-  background: #ffffff;
-  color: #d9553d;
-}
-
-.fuji-preview-btn svg {
-  width: 19px;
-  height: 19px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .fuji-empty {
   display: grid;
   place-items: center;
@@ -1678,6 +1735,104 @@ function restoreLayout(layout) {
 .fuji-empty button {
   background: #2f7d68;
   color: #ffffff;
+}
+
+.fuji-layout-wall-page {
+  max-width: 1560px;
+  margin: 0 auto;
+  border: 1px solid #d7dfdc;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 40px rgba(31, 45, 42, 0.1);
+}
+
+.fuji-layout-wall-toolbar {
+  position: sticky;
+  top: 70px;
+  z-index: 5;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 14px;
+  border-bottom: 1px solid #e1e8e5;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+}
+
+.fuji-layout-wall-title {
+  display: grid;
+  gap: 3px;
+}
+
+.fuji-layout-wall-title span {
+  color: #6b7874;
+  font-size: 0.82rem;
+}
+
+.fuji-layout-wall-title strong {
+  color: #17201d;
+  font-size: 1rem;
+}
+
+.fuji-layout-wall-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+  padding: 14px;
+}
+
+.fuji-layout-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dce4e1;
+  background: #fbfcfb;
+  color: #17201d;
+  text-align: left;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.fuji-layout-card:hover {
+  transform: translateY(-1px);
+  border-color: #2f7d68;
+  box-shadow: 0 12px 26px rgba(47, 125, 104, 0.14);
+}
+
+.fuji-layout-card img,
+.fuji-layout-card-placeholder {
+  width: 100%;
+  aspect-ratio: 100 / 148;
+  border-radius: 6px;
+  background: #e8eeeb;
+}
+
+.fuji-layout-card img {
+  object-fit: cover;
+}
+
+.fuji-layout-card-placeholder {
+  display: grid;
+  place-items: center;
+  color: #7a8984;
+  font-weight: 700;
+}
+
+.fuji-layout-card strong,
+.fuji-layout-card small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fuji-layout-card strong {
+  font-size: 0.88rem;
+}
+
+.fuji-layout-card small {
+  color: #687a75;
+  font-size: 0.76rem;
 }
 
 .fuji-layout-page {
@@ -1912,6 +2067,18 @@ function restoreLayout(layout) {
   background: #e8eeeb;
 }
 
+.fuji-draft-placeholder {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 56px;
+  border-radius: 4px;
+  background: #e8eeeb;
+  color: #7a8984;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
 .fuji-draft-list span {
   min-width: 0;
   overflow: hidden;
@@ -2025,8 +2192,8 @@ function restoreLayout(layout) {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   }
 
-  .fuji-photo-preview {
-    grid-template-columns: 1fr;
+  .fuji-layout-wall-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
 }
 
@@ -2043,9 +2210,19 @@ function restoreLayout(layout) {
     top: 62px;
   }
 
+  .fuji-layout-wall-toolbar {
+    top: 62px;
+  }
+
   .fuji-photo-wall {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 9px;
+    padding: 10px;
+  }
+
+  .fuji-layout-wall-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
     padding: 10px;
   }
 
