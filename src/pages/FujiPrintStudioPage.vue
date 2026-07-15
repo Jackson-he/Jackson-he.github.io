@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
 const API_BASE = (import.meta.env.VITE_FUJI_UPLOAD_API || 'https://www.person-common.top/api/fuji-print').replace(/\/$/, '')
+const AUTH_TOKEN_KEY = 'fuji-print-auth-token'
 
 const PRINT_SPEC = {
   paperWidthMm: 100,
@@ -95,11 +96,16 @@ const dragState = ref(null)
 const activeView = ref('library')
 const isExporting = ref(false)
 const isSavingLayout = ref(false)
+const isUnlocked = ref(false)
+const isAuthenticating = ref(false)
+const authPassword = ref('')
+const authState = ref('请输入访问密码')
+const authToken = ref('')
 const saveState = ref('待保存')
 const libraryState = ref('加载素材库')
 const layoutWallState = ref('加载排版')
 const searchText = ref('')
-const savedLayouts = ref(loadSavedLayouts())
+const savedLayouts = ref([])
 const wallDragPhotoId = ref('')
 const wallDropPhotoId = ref('')
 const suppressNextTileClick = ref(false)
@@ -161,9 +167,10 @@ watch([activeTemplateId, selectedPhotoIds], () => {
 }, { deep: true })
 
 onMounted(() => {
-  syncSlots()
-  loadRemotePhotos()
-  loadRemoteLayouts()
+  const savedToken = sessionStorage.getItem(AUTH_TOKEN_KEY)
+  if (savedToken) {
+    unlockWithToken(savedToken)
+  }
 })
 
 onBeforeUnmount(() => {
@@ -188,6 +195,96 @@ function persistSavedLayouts() {
   } catch {
     savedLayouts.value = savedLayouts.value.slice(0, 3)
     localStorage.setItem('fuji-print-layouts', JSON.stringify(savedLayouts.value))
+  }
+}
+
+async function loginWithPassword() {
+  if (isAuthenticating.value) {
+    return
+  }
+
+  const password = authPassword.value.trim()
+  if (!password) {
+    authState.value = '请输入访问密码'
+    return
+  }
+
+  isAuthenticating.value = true
+  authState.value = '验证中'
+  try {
+    const response = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    })
+    if (!response.ok) {
+      throw new Error('invalid password')
+    }
+
+    const payload = await response.json()
+    if (!payload.token) {
+      throw new Error('empty token')
+    }
+
+    sessionStorage.setItem(AUTH_TOKEN_KEY, payload.token)
+    unlockWithToken(payload.token)
+  } catch {
+    authState.value = '密码错误或服务不可用'
+  } finally {
+    isAuthenticating.value = false
+  }
+}
+
+function unlockWithToken(token) {
+  authToken.value = token
+  isUnlocked.value = true
+  authPassword.value = ''
+  authState.value = '已解锁'
+  savedLayouts.value = loadSavedLayouts()
+  syncSlots()
+  loadRemotePhotos()
+  loadRemoteLayouts()
+}
+
+function authHeaders(extraHeaders = {}) {
+  return {
+    ...extraHeaders,
+    Authorization: `Bearer ${authToken.value}`,
+  }
+}
+
+function fetchWithAuth(url, options = {}) {
+  return fetch(url, {
+    ...options,
+    headers: authHeaders(options.headers || {}),
+  })
+}
+
+function withAccessToken(url) {
+  if (!authToken.value || !url || /^blob:/i.test(url)) {
+    return url
+  }
+
+  try {
+    const parsedUrl = new URL(url, window.location.href)
+    parsedUrl.searchParams.set('access_token', authToken.value)
+    return parsedUrl.toString()
+  } catch {
+    return url
+  }
+}
+
+function stripAccessToken(url) {
+  if (!url || /^blob:/i.test(url)) {
+    return url
+  }
+
+  try {
+    const parsedUrl = new URL(url, window.location.href)
+    parsedUrl.searchParams.delete('access_token')
+    return parsedUrl.toString()
+  } catch {
+    return url
   }
 }
 
@@ -229,18 +326,18 @@ function absoluteBackendUrl(path) {
     return ''
   }
   if (/^https?:\/\//i.test(path)) {
-    return path
+    return withAccessToken(path)
   }
   if (path.startsWith('/uploads/')) {
-    return `${API_BASE}/files/${path.split('/').pop()}`
+    return withAccessToken(`${API_BASE}/files/${path.split('/').pop()}`)
   }
-  return new URL(path, `${API_BASE}/`).toString()
+  return withAccessToken(new URL(path, `${API_BASE}/`).toString())
 }
 
 async function loadRemotePhotos() {
   libraryState.value = '加载素材库'
   try {
-    const response = await fetch(`${API_BASE}/uploads`, { cache: 'no-store' })
+    const response = await fetchWithAuth(`${API_BASE}/uploads`, { cache: 'no-store' })
     if (!response.ok) {
       throw new Error('load failed')
     }
@@ -264,7 +361,7 @@ async function loadRemotePhotos() {
 async function loadRemoteLayouts() {
   layoutWallState.value = '加载排版'
   try {
-    const response = await fetch(`${API_BASE}/layouts`, { cache: 'no-store' })
+    const response = await fetchWithAuth(`${API_BASE}/layouts`, { cache: 'no-store' })
     if (!response.ok) {
       throw new Error('load layouts failed')
     }
@@ -283,7 +380,7 @@ async function fetchLayoutDetail(layout) {
     return layout
   }
 
-  const response = await fetch(`${API_BASE}/layouts/${encodeURIComponent(layout.id)}`, { cache: 'no-store' })
+  const response = await fetchWithAuth(`${API_BASE}/layouts/${encodeURIComponent(layout.id)}`, { cache: 'no-store' })
   if (!response.ok) {
     throw new Error('layout not found')
   }
@@ -509,6 +606,7 @@ function uploadFormData(url, formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', url)
+    xhr.setRequestHeader('Authorization', `Bearer ${authToken.value}`)
     xhr.timeout = UPLOAD_TIMEOUT_MS
 
     xhr.upload.onprogress = (event) => {
@@ -616,6 +714,7 @@ async function deleteLayout(layout) {
     if (layout.savedAt) {
       const response = await fetch(`${API_BASE}/layouts/${encodeURIComponent(layout.id)}`, {
         method: 'DELETE',
+        headers: authHeaders(),
       })
       if (!response.ok && response.status !== 404) {
         throw new Error('delete layout failed')
@@ -649,6 +748,7 @@ async function deletePhoto(photo) {
     if (photo.serverId) {
       const response = await fetch(`${API_BASE}/uploads/${encodeURIComponent(photo.serverId)}`, {
         method: 'DELETE',
+        headers: authHeaders(),
       })
       if (!response.ok && response.status !== 404) {
         throw new Error('delete failed')
@@ -1125,7 +1225,7 @@ function buildLayoutRecord(thumbnailDataUrl) {
       id: photo.id,
       serverId: photo.serverId || '',
       name: photo.name,
-      url: photo.url,
+      url: stripAccessToken(photo.url),
       width: photo.width,
       height: photo.height,
       size: photo.size,
@@ -1161,7 +1261,7 @@ async function saveLayout() {
   try {
     const thumbnailDataUrl = await renderComposite(420)
     record = buildLayoutRecord(thumbnailDataUrl)
-    const response = await fetch(`${API_BASE}/layouts`, {
+    const response = await fetchWithAuth(`${API_BASE}/layouts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(record),
@@ -1230,7 +1330,30 @@ async function restoreLayout(layoutItem) {
 </script>
 
 <template>
-  <main class="fuji-page">
+  <main v-if="!isUnlocked" class="fuji-auth-page">
+    <form class="fuji-auth-panel" @submit.prevent="loginWithPassword">
+      <div class="fuji-auth-title">
+        <p>FUJIFILM 小悄印 2 Pro</p>
+        <h1>访问验证</h1>
+      </div>
+      <label>
+        <span>访问密码</span>
+        <input
+          v-model="authPassword"
+          type="password"
+          autocomplete="current-password"
+          placeholder="请输入密码"
+          autofocus
+        >
+      </label>
+      <button type="submit" class="fuji-primary-btn" :disabled="isAuthenticating">
+        {{ isAuthenticating ? '验证中' : '进入' }}
+      </button>
+      <p>{{ authState }}</p>
+    </form>
+  </main>
+
+  <main v-else class="fuji-page">
     <header class="fuji-topbar">
       <div class="fuji-title-block">
         <p>FUJIFILM 小悄印 2 Pro</p>
@@ -1598,6 +1721,64 @@ async function restoreLayout(layoutItem) {
 </template>
 
 <style scoped>
+.fuji-auth-page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 18px;
+  background: #eef2f1;
+  color: #17201d;
+}
+
+.fuji-auth-panel {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 360px);
+  padding: 22px;
+  border: 1px solid #d7dfdc;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 40px rgba(31, 45, 42, 0.1);
+}
+
+.fuji-auth-title {
+  display: grid;
+  gap: 3px;
+}
+
+.fuji-auth-title p,
+.fuji-auth-title h1,
+.fuji-auth-panel p {
+  margin: 0;
+}
+
+.fuji-auth-title p,
+.fuji-auth-panel p {
+  color: #697873;
+  font-size: 0.82rem;
+}
+
+.fuji-auth-title h1 {
+  font-size: 1.45rem;
+}
+
+.fuji-auth-panel label {
+  display: grid;
+  gap: 8px;
+  color: #42514d;
+  font-size: 0.86rem;
+}
+
+.fuji-auth-panel input {
+  min-width: 0;
+  border: 1px solid #c9d4d0;
+  border-radius: 6px;
+  padding: 11px 12px;
+  background: #f8faf9;
+  color: #17201d;
+  font: inherit;
+}
+
 .fuji-page {
   min-height: 100vh;
   padding: 18px;
