@@ -94,6 +94,7 @@ const activeSlotIndex = ref(0)
 const dragState = ref(null)
 const activeView = ref('library')
 const isExporting = ref(false)
+const isSavingLayout = ref(false)
 const saveState = ref('待保存')
 const libraryState = ref('加载素材库')
 const layoutWallState = ref('加载排版')
@@ -104,6 +105,7 @@ const wallDropPhotoId = ref('')
 const suppressNextTileClick = ref(false)
 const wallPointerDrag = ref(null)
 const deletingPhotoIds = ref(new Set())
+const deletingLayoutIds = ref(new Set())
 const uploadQueue = ref([])
 const activeUploadCount = ref(0)
 
@@ -582,6 +584,54 @@ function setDeletingPhoto(photoId, isDeleting) {
     nextIds.delete(photoId)
   }
   deletingPhotoIds.value = nextIds
+}
+
+function isDeletingLayout(layout) {
+  return deletingLayoutIds.value.has(layout.id)
+}
+
+function setDeletingLayout(layoutId, isDeleting) {
+  const nextIds = new Set(deletingLayoutIds.value)
+  if (isDeleting) {
+    nextIds.add(layoutId)
+  } else {
+    nextIds.delete(layoutId)
+  }
+  deletingLayoutIds.value = nextIds
+}
+
+async function deleteLayout(layout) {
+  if (isDeletingLayout(layout)) {
+    return
+  }
+
+  const confirmed = window.confirm(`删除「${layout.name}」？`)
+  if (!confirmed) {
+    return
+  }
+
+  setDeletingLayout(layout.id, true)
+  layoutWallState.value = '删除排版'
+  try {
+    if (layout.savedAt) {
+      const response = await fetch(`${API_BASE}/layouts/${encodeURIComponent(layout.id)}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok && response.status !== 404) {
+        throw new Error('delete layout failed')
+      }
+    }
+
+    savedLayouts.value = savedLayouts.value.filter((item) => item.id !== layout.id)
+    persistSavedLayouts()
+    layoutWallState.value = savedLayouts.value.length ? `${savedLayouts.value.length} 个排版` : '暂无排版'
+    saveState.value = '已删除排版'
+  } catch {
+    layoutWallState.value = '删除失败'
+    saveState.value = '排版删除失败'
+  } finally {
+    setDeletingLayout(layout.id, false)
+  }
 }
 
 async function deletePhoto(photo) {
@@ -1086,6 +1136,10 @@ function buildLayoutRecord(thumbnailDataUrl) {
 }
 
 async function saveLayout() {
+  if (isSavingLayout.value) {
+    return
+  }
+
   if (!filledSlotCount.value) {
     saveState.value = '未选择照片'
     return
@@ -1100,11 +1154,13 @@ async function saveLayout() {
     return
   }
 
-  saveState.value = '保存中'
-  const thumbnailDataUrl = await renderComposite(420)
-  const record = buildLayoutRecord(thumbnailDataUrl)
+  isSavingLayout.value = true
+  saveState.value = '保存中，请稍候'
+  let record = null
 
   try {
+    const thumbnailDataUrl = await renderComposite(420)
+    record = buildLayoutRecord(thumbnailDataUrl)
     const response = await fetch(`${API_BASE}/layouts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1118,8 +1174,14 @@ async function saveLayout() {
     upsertSavedLayout(normalizeLayoutRecord(payload.layout || record))
     saveState.value = '已保存到后台'
   } catch {
-    upsertSavedLayout(record)
-    saveState.value = '后台保存失败，已保留本机草稿'
+    if (record) {
+      upsertSavedLayout(record)
+      saveState.value = '后台保存失败，已保留本机草稿'
+    } else {
+      saveState.value = '保存失败'
+    }
+  } finally {
+    isSavingLayout.value = false
   }
 }
 
@@ -1332,12 +1394,16 @@ async function restoreLayout(layoutItem) {
       </div>
 
       <div v-if="savedLayouts.length" class="fuji-layout-wall-grid">
-        <button
+        <article
           v-for="layout in savedLayouts"
           :key="layout.id"
-          type="button"
           class="fuji-layout-card"
+          :class="{ 'is-deleting': isDeletingLayout(layout) }"
+          role="button"
+          tabindex="0"
           @click="restoreLayout(layout)"
+          @keydown.enter.prevent="restoreLayout(layout)"
+          @keydown.space.prevent="restoreLayout(layout)"
         >
           <img
             v-if="layout.thumbnailDataUrl"
@@ -1350,7 +1416,23 @@ async function restoreLayout(layoutItem) {
           <small>
             {{ layout.templateName }} · {{ layoutPhotoCount(layout) || '-' }} 张 · {{ formatLayoutTime(layout) }}
           </small>
-        </button>
+          <button
+            type="button"
+            class="fuji-layout-delete-btn"
+            :disabled="isDeletingLayout(layout)"
+            aria-label="删除排版"
+            @click.stop="deleteLayout(layout)"
+            @keydown.stop
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 6h18" />
+              <path d="M8 6V4h8v2" />
+              <path d="M19 6l-1 15H6L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
+          </button>
+        </article>
       </div>
 
       <div v-else class="fuji-empty">
@@ -1377,7 +1459,14 @@ async function restoreLayout(layoutItem) {
                 <button type="button" class="fuji-text-btn" :disabled="isExporting" @click="downloadComposite">
                   {{ isExporting ? '导出中' : '导出 PNG' }}
                 </button>
-                <button type="button" class="fuji-primary-btn" @click="saveLayout">保存排版</button>
+                <button
+                  type="button"
+                  class="fuji-primary-btn"
+                  :disabled="isSavingLayout"
+                  @click="saveLayout"
+                >
+                  {{ isSavingLayout ? '保存中' : '保存排版' }}
+                </button>
               </div>
               <p class="fuji-save-state">{{ saveState }}</p>
             </div>
@@ -1537,6 +1626,7 @@ async function restoreLayout(layoutItem) {
 .fuji-view-btn,
 .fuji-upload-btn,
 .fuji-delete-btn,
+.fuji-layout-delete-btn,
 .fuji-drag-handle,
 .fuji-photo-tile,
 .fuji-layout-card,
@@ -1590,6 +1680,7 @@ async function restoreLayout(layoutItem) {
 .fuji-view-btn,
 .fuji-upload-btn,
 .fuji-delete-btn,
+.fuji-layout-delete-btn,
 .fuji-drag-handle,
 .fuji-layout-card,
 .fuji-empty button {
@@ -1612,6 +1703,11 @@ async function restoreLayout(layoutItem) {
 .fuji-primary-btn {
   background: #d9553d;
   color: #ffffff;
+}
+
+.fuji-primary-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .fuji-view-btn {
@@ -1942,6 +2038,7 @@ async function restoreLayout(layoutItem) {
 }
 
 .fuji-layout-card {
+  position: relative;
   display: grid;
   gap: 8px;
   align-content: start;
@@ -1952,12 +2049,20 @@ async function restoreLayout(layoutItem) {
   color: #17201d;
   text-align: left;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  cursor: pointer;
 }
 
-.fuji-layout-card:hover {
+.fuji-layout-card:hover,
+.fuji-layout-card:focus-visible {
   transform: translateY(-1px);
   border-color: #2f7d68;
   box-shadow: 0 12px 26px rgba(47, 125, 104, 0.14);
+  outline: 0;
+}
+
+.fuji-layout-card.is-deleting {
+  opacity: 0.56;
+  pointer-events: none;
 }
 
 .fuji-layout-card img,
@@ -1994,6 +2099,43 @@ async function restoreLayout(layoutItem) {
 .fuji-layout-card small {
   color: #687a75;
   font-size: 0.76rem;
+}
+
+.fuji-layout-delete-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.92);
+  color: #8f2f25;
+  border: 1px solid rgba(143, 47, 37, 0.18);
+  box-shadow: 0 8px 18px rgba(23, 32, 29, 0.16);
+}
+
+.fuji-layout-delete-btn:hover {
+  background: #fff4f1;
+  color: #d9553d;
+}
+
+.fuji-layout-delete-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.fuji-layout-delete-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .fuji-layout-page {
