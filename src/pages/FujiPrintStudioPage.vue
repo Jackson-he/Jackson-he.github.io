@@ -1956,8 +1956,6 @@ async function restoreLayout(layoutItem) {
                 <strong>{{ activeTemplate.name }}</strong>
               </div>
               <div class="fuji-layout-actions">
-                <button type="button" class="fuji-text-btn" @click="showLibrary">照片墙</button>
-                <button type="button" class="fuji-text-btn" @click="showLayoutWall">排版墙</button>
                 <button type="button" class="fuji-text-btn" :disabled="isExporting" @click="downloadComposite">
                   {{ isExporting ? '导出中' : '导出 PNG' }}
                 </button>
