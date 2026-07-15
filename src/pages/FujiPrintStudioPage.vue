@@ -111,9 +111,6 @@ const PHOTO_ORDER_KEY = 'fuji-print-photo-order'
 const MAX_UPLOAD_CONCURRENCY = 2
 const UPLOAD_RETRY_LIMIT = 2
 const UPLOAD_TIMEOUT_MS = 120000
-const OPTIMIZE_MIN_BYTES = 2.5 * 1024 * 1024
-const OPTIMIZE_MAX_DIMENSION = 2600
-const OPTIMIZE_JPEG_QUALITY = 0.88
 
 const activeTemplate = computed(() => {
   return layoutTemplates.find((template) => template.id === activeTemplateId.value) || layoutTemplates[0]
@@ -336,9 +333,8 @@ async function runUploadJob(job) {
   }
 
   try {
-    photo.status = attempt ? `重试上传 ${attempt}/${UPLOAD_RETRY_LIMIT}` : '压缩中'
-    const uploadFile = await prepareUploadFile(file)
-    await uploadPhoto(photo, uploadFile, file, attempt)
+    photo.status = attempt ? `重试上传 ${attempt}/${UPLOAD_RETRY_LIMIT}` : '准备上传'
+    await uploadPhoto(photo, file, attempt)
   } catch (error) {
     if (attempt < UPLOAD_RETRY_LIMIT && photos.value.includes(photo)) {
       photo.status = `等待重试 ${attempt + 1}/${UPLOAD_RETRY_LIMIT}`
@@ -351,57 +347,10 @@ async function runUploadJob(job) {
   }
 }
 
-async function prepareUploadFile(file) {
-  if (!file.type.startsWith('image/') || file.type === 'image/gif') {
-    return file
-  }
-
-  let bitmap
-  try {
-    bitmap = await createImageBitmap(file)
-  } catch {
-    return file
-  }
-
-  const largestSide = Math.max(bitmap.width, bitmap.height)
-  if (file.size <= OPTIMIZE_MIN_BYTES && largestSide <= OPTIMIZE_MAX_DIMENSION) {
-    bitmap.close?.()
-    return file
-  }
-
-  const scale = Math.min(1, OPTIMIZE_MAX_DIMENSION / largestSide)
-  const width = Math.max(1, Math.round(bitmap.width * scale))
-  const height = Math.max(1, Math.round(bitmap.height * scale))
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const context = canvas.getContext('2d')
-  context.drawImage(bitmap, 0, 0, width, height)
-  bitmap.close?.()
-
-  const blob = await new Promise((resolve) => {
-    canvas.toBlob(resolve, 'image/jpeg', OPTIMIZE_JPEG_QUALITY)
-  })
-
-  if (!blob || blob.size >= file.size) {
-    return file
-  }
-
-  return new File([blob], replaceFileExtension(file.name, 'jpg'), {
-    type: 'image/jpeg',
-    lastModified: Date.now(),
-  })
-}
-
-function replaceFileExtension(filename, extension) {
-  const baseName = filename.replace(/\.[^.]+$/, '')
-  return `${baseName || 'image'}.${extension}`
-}
-
-async function uploadPhoto(photo, file, originalFile, attempt) {
+async function uploadPhoto(photo, file, attempt) {
   const formData = new FormData()
   formData.append('file', file, file.name)
-  formData.append('originalName', originalFile.name)
+  formData.append('originalName', file.name)
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => {
     controller.abort()
@@ -416,7 +365,7 @@ async function uploadPhoto(photo, file, originalFile, attempt) {
     })
 
     if (!response.ok) {
-      throw new Error(response.status === 413 ? 'too_large' : 'upload_failed')
+      throw new Error('upload_failed')
     }
 
     const payload = await response.json()
@@ -444,9 +393,6 @@ async function uploadPhoto(photo, file, originalFile, attempt) {
 function getUploadErrorMessage(error) {
   if (error?.name === 'AbortError') {
     return '上传超时，保留本地预览'
-  }
-  if (error?.message === 'too_large') {
-    return '文件过大，保留本地预览'
   }
   return '上传失败，保留本地预览'
 }
