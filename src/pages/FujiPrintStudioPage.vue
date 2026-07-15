@@ -98,6 +98,22 @@ const saveState = ref('待保存')
 const libraryState = ref('加载素材库')
 const searchText = ref('')
 const savedLayouts = ref(loadSavedLayouts())
+const wallDragPhotoId = ref('')
+const wallDropPhotoId = ref('')
+const previewPhotoId = ref('')
+const suppressNextTileClick = ref(false)
+const wallPointerDrag = ref(null)
+const deletingPhotoIds = ref(new Set())
+const uploadQueue = ref([])
+const activeUploadCount = ref(0)
+
+const PHOTO_ORDER_KEY = 'fuji-print-photo-order'
+const MAX_UPLOAD_CONCURRENCY = 2
+const UPLOAD_RETRY_LIMIT = 2
+const UPLOAD_TIMEOUT_MS = 120000
+const OPTIMIZE_MIN_BYTES = 2.5 * 1024 * 1024
+const OPTIMIZE_MAX_DIMENSION = 2600
+const OPTIMIZE_JPEG_QUALITY = 0.88
 
 const activeTemplate = computed(() => {
   return layoutTemplates.find((template) => template.id === activeTemplateId.value) || layoutTemplates[0]
@@ -117,11 +133,22 @@ const displayedPhotos = computed(() => {
   return photos.value.filter((photo) => photo.name.toLowerCase().includes(keyword))
 })
 
+const previewPhoto = computed(() => {
+  return photos.value.find((photo) => photo.id === previewPhotoId.value) || null
+})
+
 const activeSlotPhoto = computed(() => getCellPhoto(activeSlotIndex.value))
 const activeSlotTransform = computed(() => slotTransforms.value[activeSlotIndex.value] || null)
 const filledSlotCount = computed(() => slotPhotoIds.value.filter(Boolean).length)
 const printSummary = computed(() => {
   return `${PRINT_SPEC.printWidthMm}×${PRINT_SPEC.printHeightMm}mm · ${PRINT_SPEC.dpi}dpi · ${PRINT_SPEC.pixelWidth}×${PRINT_SPEC.pixelHeight}px`
+})
+const uploadQueueSummary = computed(() => {
+  if (!activeUploadCount.value && !uploadQueue.value.length) {
+    return ''
+  }
+
+  return `上传中 ${activeUploadCount.value} · 等待 ${uploadQueue.value.length}`
 })
 
 watch([activeTemplateId, selectedPhotoIds], () => {
@@ -183,11 +210,12 @@ async function loadRemotePhotos() {
     const remotePhotos = (payload.files || []).map(mapUploadedFile)
     const localOnlyPhotos = photos.value.filter((photo) => photo.objectUrl && !photo.serverId)
 
-    photos.value = [...localOnlyPhotos, ...remotePhotos]
+    photos.value = applySavedPhotoOrder([...localOnlyPhotos, ...remotePhotos])
     photos.value.forEach(loadImageSize)
     selectedPhotoIds.value = selectedPhotoIds.value.filter((id) => {
       return photos.value.some((photo) => photo.id === id)
     })
+    syncSelectionOrderWithWall()
     libraryState.value = `${photos.value.length} 张素材`
   } catch {
     libraryState.value = photos.value.length ? `${photos.value.length} 张本地素材` : '素材库离线'
@@ -264,9 +292,10 @@ async function addFiles(files) {
 
     photos.value = [photo, ...photos.value]
     loadImageSize(photo)
-    uploadPhoto(photo, file)
+    enqueueUpload(photo, file)
   }
   libraryState.value = `${photos.value.length} 张素材`
+  persistPhotoOrder()
 }
 
 function loadImageSize(photo) {
@@ -283,19 +312,111 @@ function loadImageSize(photo) {
   image.src = photo.url
 }
 
-async function uploadPhoto(photo, file) {
-  const formData = new FormData()
-  formData.append('file', file)
+function enqueueUpload(photo, file) {
+  photo.status = '等待上传'
+  uploadQueue.value.push({ photo, file, attempt: 0 })
+  processUploadQueue()
+}
+
+function processUploadQueue() {
+  while (activeUploadCount.value < MAX_UPLOAD_CONCURRENCY && uploadQueue.value.length) {
+    const job = uploadQueue.value.shift()
+    activeUploadCount.value += 1
+    runUploadJob(job).finally(() => {
+      activeUploadCount.value -= 1
+      processUploadQueue()
+    })
+  }
+}
+
+async function runUploadJob(job) {
+  const { photo, file, attempt } = job
+  if (!photos.value.includes(photo)) {
+    return
+  }
 
   try {
-    photo.status = '上传中'
+    photo.status = attempt ? `重试上传 ${attempt}/${UPLOAD_RETRY_LIMIT}` : '压缩中'
+    const uploadFile = await prepareUploadFile(file)
+    await uploadPhoto(photo, uploadFile, file, attempt)
+  } catch (error) {
+    if (attempt < UPLOAD_RETRY_LIMIT && photos.value.includes(photo)) {
+      photo.status = `等待重试 ${attempt + 1}/${UPLOAD_RETRY_LIMIT}`
+      await sleep(900 * (attempt + 1))
+      await runUploadJob({ photo, file, attempt: attempt + 1 })
+      return
+    }
+
+    photo.status = getUploadErrorMessage(error)
+  }
+}
+
+async function prepareUploadFile(file) {
+  if (!file.type.startsWith('image/') || file.type === 'image/gif') {
+    return file
+  }
+
+  let bitmap
+  try {
+    bitmap = await createImageBitmap(file)
+  } catch {
+    return file
+  }
+
+  const largestSide = Math.max(bitmap.width, bitmap.height)
+  if (file.size <= OPTIMIZE_MIN_BYTES && largestSide <= OPTIMIZE_MAX_DIMENSION) {
+    bitmap.close?.()
+    return file
+  }
+
+  const scale = Math.min(1, OPTIMIZE_MAX_DIMENSION / largestSide)
+  const width = Math.max(1, Math.round(bitmap.width * scale))
+  const height = Math.max(1, Math.round(bitmap.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  context.drawImage(bitmap, 0, 0, width, height)
+  bitmap.close?.()
+
+  const blob = await new Promise((resolve) => {
+    canvas.toBlob(resolve, 'image/jpeg', OPTIMIZE_JPEG_QUALITY)
+  })
+
+  if (!blob || blob.size >= file.size) {
+    return file
+  }
+
+  return new File([blob], replaceFileExtension(file.name, 'jpg'), {
+    type: 'image/jpeg',
+    lastModified: Date.now(),
+  })
+}
+
+function replaceFileExtension(filename, extension) {
+  const baseName = filename.replace(/\.[^.]+$/, '')
+  return `${baseName || 'image'}.${extension}`
+}
+
+async function uploadPhoto(photo, file, originalFile, attempt) {
+  const formData = new FormData()
+  formData.append('file', file, file.name)
+  formData.append('originalName', originalFile.name)
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => {
+    controller.abort()
+  }, UPLOAD_TIMEOUT_MS)
+
+  try {
+    photo.status = attempt ? `上传中 · 第 ${attempt + 1} 次` : '上传中'
     const response = await fetch(`${API_BASE}/uploads`, {
       method: 'POST',
       body: formData,
+      signal: controller.signal,
     })
 
     if (!response.ok) {
-      throw new Error('upload failed')
+      throw new Error(response.status === 413 ? 'too_large' : 'upload_failed')
     }
 
     const payload = await response.json()
@@ -314,12 +435,32 @@ async function uploadPhoto(photo, file) {
       URL.revokeObjectURL(previousObjectUrl)
     }
     loadImageSize(photo)
-  } catch {
-    photo.status = '本地预览'
+    persistPhotoOrder()
+  } finally {
+    window.clearTimeout(timeoutId)
   }
 }
 
+function getUploadErrorMessage(error) {
+  if (error?.name === 'AbortError') {
+    return '上传超时，保留本地预览'
+  }
+  if (error?.message === 'too_large') {
+    return '文件过大，保留本地预览'
+  }
+  return '上传失败，保留本地预览'
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
 function togglePhoto(photo) {
+  if (suppressNextTileClick.value) {
+    suppressNextTileClick.value = false
+    return
+  }
+
   if (selectedPhotoIds.value.includes(photo.id)) {
     selectedPhotoIds.value = selectedPhotoIds.value.filter((id) => id !== photo.id)
     return
@@ -330,6 +471,213 @@ function togglePhoto(photo) {
 
 function clearSelection() {
   selectedPhotoIds.value = []
+}
+
+function isDeletingPhoto(photo) {
+  return deletingPhotoIds.value.has(photo.id)
+}
+
+function setDeletingPhoto(photoId, isDeleting) {
+  const nextIds = new Set(deletingPhotoIds.value)
+  if (isDeleting) {
+    nextIds.add(photoId)
+  } else {
+    nextIds.delete(photoId)
+  }
+  deletingPhotoIds.value = nextIds
+}
+
+async function deletePhoto(photo) {
+  if (isDeletingPhoto(photo)) {
+    return
+  }
+
+  const confirmed = window.confirm(`删除「${photo.name}」？`)
+  if (!confirmed) {
+    return
+  }
+
+  setDeletingPhoto(photo.id, true)
+  try {
+    if (photo.serverId) {
+      const response = await fetch(`${API_BASE}/uploads/${encodeURIComponent(photo.serverId)}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok && response.status !== 404) {
+        throw new Error('delete failed')
+      }
+    }
+    removePhotoFromClient(photo.id)
+  } catch {
+    photo.status = '删除失败'
+  } finally {
+    setDeletingPhoto(photo.id, false)
+  }
+}
+
+function removePhotoFromClient(photoId) {
+  const photo = photos.value.find((item) => item.id === photoId)
+  if (photo?.objectUrl) {
+    URL.revokeObjectURL(photo.objectUrl)
+  }
+
+  photos.value = photos.value.filter((item) => item.id !== photoId)
+  selectedPhotoIds.value = selectedPhotoIds.value.filter((id) => id !== photoId)
+  slotPhotoIds.value = slotPhotoIds.value.map((id) => (id === photoId ? null : id))
+  if (previewPhotoId.value === photoId) {
+    previewPhotoId.value = ''
+  }
+  persistPhotoOrder()
+  syncSlots()
+  libraryState.value = `${photos.value.length} 张素材`
+}
+
+function openPhotoPreview(photo) {
+  previewPhotoId.value = photo.id
+}
+
+function closePhotoPreview() {
+  previewPhotoId.value = ''
+}
+
+function startWallDrag(event, photo) {
+  wallDragPhotoId.value = photo.id
+  wallDropPhotoId.value = photo.id
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', photo.id)
+}
+
+function enterWallDrop(photo) {
+  if (wallDragPhotoId.value && wallDragPhotoId.value !== photo.id) {
+    wallDropPhotoId.value = photo.id
+  }
+}
+
+function leaveWallDrop(photo) {
+  if (wallDropPhotoId.value === photo.id) {
+    wallDropPhotoId.value = ''
+  }
+}
+
+function dropWallPhoto(photo) {
+  const draggedId = wallDragPhotoId.value
+  clearWallDragState()
+  if (!draggedId || draggedId === photo.id) {
+    return
+  }
+
+  reorderPhotos(draggedId, photo.id)
+  suppressNextTileClick.value = true
+  window.setTimeout(() => {
+    suppressNextTileClick.value = false
+  }, 0)
+}
+
+function clearWallDragState() {
+  wallDragPhotoId.value = ''
+  wallDropPhotoId.value = ''
+  wallPointerDrag.value = null
+}
+
+function startWallPointerDrag(event, photo) {
+  if (event.button != null && event.button !== 0) {
+    return
+  }
+
+  wallPointerDrag.value = {
+    photoId: photo.id,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    dragging: false,
+  }
+  wallDragPhotoId.value = photo.id
+  wallDropPhotoId.value = photo.id
+  event.currentTarget.setPointerCapture(event.pointerId)
+}
+
+function moveWallPointerDrag(event) {
+  const state = wallPointerDrag.value
+  if (!state || state.pointerId !== event.pointerId) {
+    return
+  }
+
+  const distance = Math.hypot(event.clientX - state.startX, event.clientY - state.startY)
+  if (!state.dragging && distance < 8) {
+    return
+  }
+
+  state.dragging = true
+  suppressNextTileClick.value = true
+  const targetTile = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-photo-id]')
+  const targetId = targetTile?.dataset?.photoId
+  if (targetId && targetId !== state.photoId) {
+    wallDropPhotoId.value = targetId
+  }
+}
+
+function endWallPointerDrag(event) {
+  const state = wallPointerDrag.value
+  if (!state || state.pointerId !== event.pointerId) {
+    return
+  }
+
+  if (state.dragging && wallDropPhotoId.value && wallDropPhotoId.value !== state.photoId) {
+    reorderPhotos(state.photoId, wallDropPhotoId.value)
+  }
+
+  clearWallDragState()
+  window.setTimeout(() => {
+    suppressNextTileClick.value = false
+  }, 0)
+}
+
+function reorderPhotos(draggedId, targetId) {
+  const nextPhotos = [...photos.value]
+  const draggedIndex = nextPhotos.findIndex((photo) => photo.id === draggedId)
+  const targetIndex = nextPhotos.findIndex((photo) => photo.id === targetId)
+  if (draggedIndex < 0 || targetIndex < 0) {
+    return
+  }
+
+  const [draggedPhoto] = nextPhotos.splice(draggedIndex, 1)
+  nextPhotos.splice(targetIndex, 0, draggedPhoto)
+  photos.value = nextPhotos
+  syncSelectionOrderWithWall()
+  persistPhotoOrder()
+}
+
+function applySavedPhotoOrder(photoList) {
+  const savedOrder = loadSavedPhotoOrder()
+  if (!savedOrder.length) {
+    return photoList
+  }
+
+  const orderMap = new Map(savedOrder.map((id, index) => [id, index]))
+  return [...photoList].sort((left, right) => {
+    const leftOrder = orderMap.has(left.id) ? orderMap.get(left.id) : Number.MAX_SAFE_INTEGER
+    const rightOrder = orderMap.has(right.id) ? orderMap.get(right.id) : Number.MAX_SAFE_INTEGER
+    return leftOrder - rightOrder
+  })
+}
+
+function loadSavedPhotoOrder() {
+  try {
+    return JSON.parse(localStorage.getItem(PHOTO_ORDER_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+function persistPhotoOrder() {
+  localStorage.setItem(PHOTO_ORDER_KEY, JSON.stringify(photos.value.map((photo) => photo.id)))
+}
+
+function syncSelectionOrderWithWall() {
+  const selected = new Set(selectedPhotoIds.value)
+  selectedPhotoIds.value = photos.value
+    .filter((photo) => selected.has(photo.id))
+    .map((photo) => photo.id)
 }
 
 function openLayout() {
@@ -688,7 +1036,7 @@ function restoreLayout(layout) {
           <input
             ref="fileInput"
             type="file"
-            accept="image/*"
+            accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif"
             multiple
             @change="handleFileChange"
           >
@@ -703,6 +1051,7 @@ function restoreLayout(layout) {
         >
         <div class="fuji-library-count">
           <span>{{ libraryState }}</span>
+          <strong v-if="uploadQueueSummary">{{ uploadQueueSummary }}</strong>
           <strong>已选 {{ selectedPhotoIds.length }}</strong>
         </div>
         <button
@@ -715,21 +1064,84 @@ function restoreLayout(layout) {
         </button>
       </div>
 
+      <section v-if="previewPhoto" class="fuji-photo-preview">
+        <div class="fuji-preview-image-wrap">
+          <img :src="previewPhoto.url" :alt="previewPhoto.name">
+        </div>
+        <div class="fuji-preview-info">
+          <p>预览</p>
+          <h2>{{ previewPhoto.name }}</h2>
+          <span>{{ photoMeta(previewPhoto) }}</span>
+          <div class="fuji-preview-actions">
+            <button type="button" class="fuji-primary-btn" @click="togglePhoto(previewPhoto)">
+              {{ selectedPhotoIds.includes(previewPhoto.id) ? '取消选择' : '选择照片' }}
+            </button>
+            <button type="button" class="fuji-text-btn" @click="closePhotoPreview">关闭预览</button>
+          </div>
+        </div>
+      </section>
+
       <div v-if="displayedPhotos.length" class="fuji-photo-wall">
-        <button
+        <article
           v-for="photo in displayedPhotos"
           :key="photo.id"
-          type="button"
+          :data-photo-id="photo.id"
           class="fuji-photo-tile"
-          :class="{ 'is-selected': selectedPhotoIds.includes(photo.id) }"
+          :class="{
+            'is-selected': selectedPhotoIds.includes(photo.id),
+            'is-dragging': wallDragPhotoId === photo.id,
+            'is-drop-target': wallDropPhotoId === photo.id && wallDragPhotoId !== photo.id,
+            'is-deleting': isDeletingPhoto(photo),
+          }"
+          draggable="true"
           @click="togglePhoto(photo)"
+          @dblclick.stop="openPhotoPreview(photo)"
+          @dragstart="startWallDrag($event, photo)"
+          @dragenter.prevent="enterWallDrop(photo)"
+          @dragover.prevent="enterWallDrop(photo)"
+          @dragleave="leaveWallDrop(photo)"
+          @drop.prevent="dropWallPhoto(photo)"
+          @dragend="clearWallDragState"
         >
-          <img :src="photo.url" :alt="photo.name" loading="lazy">
+          <img :src="photo.url" :alt="photo.name" loading="lazy" draggable="false">
           <span v-if="getPhotoLabel(photo)" class="fuji-pick-order">{{ getPhotoLabel(photo) }}</span>
           <span class="fuji-photo-status">{{ photo.status }}</span>
+          <button
+            type="button"
+            class="fuji-delete-btn"
+            :disabled="isDeletingPhoto(photo)"
+            aria-label="删除照片"
+            @click.stop="deletePhoto(photo)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 6h18" />
+              <path d="M8 6V4h8v2" />
+              <path d="M19 6l-1 15H6L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="fuji-drag-handle"
+            aria-label="拖动排序"
+            @click.stop
+            @pointerdown.stop.prevent="startWallPointerDrag($event, photo)"
+            @pointermove.stop.prevent="moveWallPointerDrag"
+            @pointerup.stop.prevent="endWallPointerDrag"
+            @pointercancel.stop.prevent="clearWallDragState"
+          >
+            ≡
+          </button>
+          <button type="button" class="fuji-preview-btn" aria-label="预览照片" @click.stop="openPhotoPreview(photo)">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </button>
           <strong>{{ photo.name }}</strong>
           <small>{{ photoMeta(photo) }}</small>
-        </button>
+        </article>
       </div>
 
       <div v-else class="fuji-empty">
@@ -743,22 +1155,23 @@ function restoreLayout(layout) {
       class="fuji-layout-page"
     >
       <div class="fuji-layout-panel">
-        <header class="fuji-layout-head">
-          <div>
-            <p>{{ printSummary }}</p>
-            <h2>{{ activeTemplate.name }}</h2>
-          </div>
-          <div class="fuji-layout-actions">
-            <button type="button" class="fuji-text-btn" @click="showLibrary">照片墙</button>
-            <button type="button" class="fuji-text-btn" :disabled="isExporting" @click="downloadComposite">
-              {{ isExporting ? '导出中' : '导出 PNG' }}
-            </button>
-            <button type="button" class="fuji-primary-btn" @click="saveLayout">保存排版</button>
-          </div>
-        </header>
-
         <div class="fuji-layout-body">
           <aside class="fuji-layout-side">
+            <div class="fuji-side-section fuji-layout-command-section">
+              <div class="fuji-side-title">
+                <span>{{ printSummary }}</span>
+                <strong>{{ activeTemplate.name }}</strong>
+              </div>
+              <div class="fuji-layout-actions">
+                <button type="button" class="fuji-text-btn" @click="showLibrary">照片墙</button>
+                <button type="button" class="fuji-text-btn" :disabled="isExporting" @click="downloadComposite">
+                  {{ isExporting ? '导出中' : '导出 PNG' }}
+                </button>
+                <button type="button" class="fuji-primary-btn" @click="saveLayout">保存排版</button>
+              </div>
+              <p class="fuji-save-state">{{ saveState }}</p>
+            </div>
+
             <div class="fuji-side-section">
               <div class="fuji-side-title">
                 <span>模板</span>
@@ -912,6 +1325,9 @@ function restoreLayout(layout) {
 .fuji-primary-btn,
 .fuji-view-btn,
 .fuji-upload-btn,
+.fuji-delete-btn,
+.fuji-drag-handle,
+.fuji-preview-btn,
 .fuji-photo-tile,
 .fuji-template-grid button,
 .fuji-selected-strip button,
@@ -934,15 +1350,13 @@ function restoreLayout(layout) {
   box-shadow: 0 10px 28px rgba(31, 45, 42, 0.12);
 }
 
-.fuji-title-block p,
-.fuji-layout-head p {
+.fuji-title-block p {
   margin: 0 0 3px;
   color: #697873;
   font-size: 0.78rem;
 }
 
-.fuji-title-block h1,
-.fuji-layout-head h2 {
+.fuji-title-block h1 {
   margin: 0;
 }
 
@@ -963,6 +1377,9 @@ function restoreLayout(layout) {
 .fuji-primary-btn,
 .fuji-view-btn,
 .fuji-upload-btn,
+.fuji-delete-btn,
+.fuji-drag-handle,
+.fuji-preview-btn,
 .fuji-empty button {
   border: 0;
   border-radius: 6px;
@@ -1062,6 +1479,66 @@ function restoreLayout(layout) {
   color: #2f7d68;
 }
 
+.fuji-photo-preview {
+  display: grid;
+  grid-template-columns: minmax(260px, 420px) minmax(0, 1fr);
+  gap: 16px;
+  margin: 14px;
+  padding: 12px;
+  border: 1px solid #dce4e1;
+  border-radius: 8px;
+  background: #f8faf9;
+}
+
+.fuji-preview-image-wrap {
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  border-radius: 6px;
+  background: #e8efec;
+  overflow: hidden;
+}
+
+.fuji-preview-image-wrap img {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+}
+
+.fuji-preview-info {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fuji-preview-info p,
+.fuji-preview-info h2 {
+  margin: 0;
+}
+
+.fuji-preview-info p {
+  color: #6b7874;
+  font-size: 0.78rem;
+}
+
+.fuji-preview-info h2 {
+  overflow-wrap: anywhere;
+  font-size: clamp(1.2rem, 3vw, 2rem);
+}
+
+.fuji-preview-info span {
+  color: #687a75;
+}
+
+.fuji-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
 .fuji-photo-wall {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -1081,6 +1558,7 @@ function restoreLayout(layout) {
   background: #fbfcfb;
   color: #17201d;
   text-align: left;
+  user-select: none;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
@@ -1092,6 +1570,21 @@ function restoreLayout(layout) {
 .fuji-photo-tile.is-selected {
   border-color: #d9553d;
   box-shadow: inset 0 0 0 1px #d9553d;
+}
+
+.fuji-photo-tile.is-dragging {
+  opacity: 0.42;
+  transform: scale(0.98);
+}
+
+.fuji-photo-tile.is-drop-target {
+  border-color: #2f7d68;
+  box-shadow: inset 0 0 0 2px #2f7d68, 0 10px 24px rgba(47, 125, 104, 0.18);
+}
+
+.fuji-photo-tile.is-deleting {
+  opacity: 0.58;
+  pointer-events: none;
 }
 
 .fuji-photo-tile img {
@@ -1138,9 +1631,94 @@ function restoreLayout(layout) {
 }
 
 .fuji-photo-status {
-  right: 14px;
+  right: 52px;
   background: rgba(23, 32, 29, 0.72);
   color: #ffffff;
+}
+
+.fuji-delete-btn,
+.fuji-drag-handle {
+  position: absolute;
+}
+
+.fuji-delete-btn {
+  top: 14px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.92);
+  color: #8f2f25;
+  border: 1px solid rgba(143, 47, 37, 0.16);
+  box-shadow: 0 6px 16px rgba(23, 32, 29, 0.14);
+}
+
+.fuji-delete-btn:hover {
+  background: #fff4f1;
+  color: #d9553d;
+}
+
+.fuji-delete-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.fuji-delete-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fuji-drag-handle {
+  left: 14px;
+  bottom: 56px;
+  min-height: 30px;
+  padding: 5px 9px;
+  background: rgba(23, 32, 29, 0.78);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  touch-action: none;
+  box-shadow: 0 6px 16px rgba(23, 32, 29, 0.16);
+}
+
+.fuji-preview-btn {
+  position: absolute;
+  right: 14px;
+  bottom: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-height: 30px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.9);
+  color: #17201d;
+  border: 1px solid rgba(23, 32, 29, 0.12);
+  box-shadow: 0 6px 16px rgba(23, 32, 29, 0.16);
+}
+
+.fuji-preview-btn:hover {
+  background: #ffffff;
+  color: #d9553d;
+}
+
+.fuji-preview-btn svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .fuji-empty {
@@ -1163,7 +1741,6 @@ function restoreLayout(layout) {
 
 .fuji-layout-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   min-height: calc(100vh - 96px);
   overflow: visible;
   border: 1px solid #d7dfdc;
@@ -1172,26 +1749,46 @@ function restoreLayout(layout) {
   box-shadow: 0 14px 40px rgba(31, 45, 42, 0.1);
 }
 
-.fuji-layout-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 14px 16px;
-  border-bottom: 1px solid #dce5e1;
-  background: #ffffff;
+.fuji-layout-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.fuji-layout-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
+.fuji-layout-actions .fuji-primary-btn {
+  grid-column: 1 / -1;
+}
+
+.fuji-layout-command-section {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e1e8e5;
+}
+
+.fuji-layout-command-section .fuji-side-title {
+  display: grid;
+  gap: 4px;
+  align-items: start;
+}
+
+.fuji-layout-command-section .fuji-side-title span {
+  line-height: 1.5;
+}
+
+.fuji-layout-command-section .fuji-side-title strong {
+  font-size: 1.05rem;
+}
+
+.fuji-save-state {
+  margin: 0;
+  color: #71807c;
+  font-size: 0.82rem;
 }
 
 .fuji-layout-body {
   display: grid;
   grid-template-columns: 330px minmax(0, 1fr);
   gap: 0;
-  min-height: calc(100vh - 170px);
+  min-height: calc(100vh - 96px);
 }
 
 .fuji-layout-side {
@@ -1481,6 +2078,10 @@ function restoreLayout(layout) {
   .fuji-photo-wall {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   }
+
+  .fuji-photo-preview {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1500,19 +2101,6 @@ function restoreLayout(layout) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 9px;
     padding: 10px;
-  }
-
-  .fuji-layout-head {
-    display: grid;
-  }
-
-  .fuji-layout-actions {
-    justify-content: stretch;
-  }
-
-  .fuji-layout-actions .fuji-text-btn,
-  .fuji-layout-actions .fuji-primary-btn {
-    flex: 1 1 auto;
   }
 
   .fuji-paper-shadow {
