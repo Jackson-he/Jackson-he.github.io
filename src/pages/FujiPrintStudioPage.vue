@@ -16,6 +16,12 @@ const PRINT_SPEC = {
   pixelHeight: 1748,
 }
 
+const DEFAULT_LAYOUT_STYLE = {
+  spacingMm: 0,
+  borderRadiusMm: 0,
+  ignoreEdgeSpacing: false,
+}
+
 function makeGridCells(columns, rows) {
   const cells = []
   for (let row = 0; row < rows; row += 1) {
@@ -445,6 +451,7 @@ const photos = ref([])
 const selectedPhotoIds = ref([])
 const slotPhotoIds = ref([])
 const slotTransforms = ref([])
+const layoutStyle = ref({ ...DEFAULT_LAYOUT_STYLE })
 const activeTemplateId = ref('four-grid')
 const activeSlotIndex = ref(0)
 const dragState = ref(null)
@@ -1311,7 +1318,7 @@ function showLayoutWall() {
 }
 
 function getDefaultTransform() {
-  return { scale: 1, x: 50, y: 50 }
+  return { scale: 1, x: 50, y: 50, rotation: 0 }
 }
 
 function syncSlots() {
@@ -1355,21 +1362,71 @@ function getCellBox(cell, width, height) {
   }
 }
 
+function normalizeLayoutStyle(style = {}) {
+  return {
+    spacingMm: clamp(Number(style.spacingMm ?? style.gapMm ?? DEFAULT_LAYOUT_STYLE.spacingMm), 0, 6),
+    borderRadiusMm: clamp(Number(style.borderRadiusMm ?? style.radiusMm ?? DEFAULT_LAYOUT_STYLE.borderRadiusMm), 0, 10),
+    ignoreEdgeSpacing: Boolean(style.ignoreEdgeSpacing ?? style.edgeBleed ?? DEFAULT_LAYOUT_STYLE.ignoreEdgeSpacing),
+  }
+}
+
+function getStyledCellBox(cell, width, height) {
+  const box = getCellBox(cell, width, height)
+  const inset = Math.min(Number(layoutStyle.value.spacingMm || 0) / 2, box.w / 2, box.h / 2)
+  const ignoreEdge = Boolean(layoutStyle.value.ignoreEdgeSpacing)
+  const edgeEpsilon = 0.0001
+  const leftInset = ignoreEdge && box.x <= edgeEpsilon ? 0 : inset
+  const topInset = ignoreEdge && box.y <= edgeEpsilon ? 0 : inset
+  const rightInset = ignoreEdge && box.x + box.w >= width - edgeEpsilon ? 0 : inset
+  const bottomInset = ignoreEdge && box.y + box.h >= height - edgeEpsilon ? 0 : inset
+  return {
+    x: box.x + leftInset,
+    y: box.y + topInset,
+    w: Math.max(0, box.w - leftInset - rightInset),
+    h: Math.max(0, box.h - topInset - bottomInset),
+  }
+}
+
+function boxRadiusPercent(box) {
+  const radius = Number(layoutStyle.value.borderRadiusMm || 0)
+  if (!radius || !box.w || !box.h) {
+    return '0'
+  }
+  return `${Math.min(50, (radius / Math.min(box.w, box.h)) * 100)}%`
+}
+
+function rotationCoverScale(width, height, rotation) {
+  const angle = Math.abs(Number(rotation || 0)) % 180
+  if (!angle) {
+    return 1
+  }
+  const radians = (angle * Math.PI) / 180
+  const sin = Math.abs(Math.sin(radians))
+  const cos = Math.abs(Math.cos(radians))
+  return Math.max(
+    (width * cos + height * sin) / width,
+    (width * sin + height * cos) / height,
+  )
+}
+
 function cellBoxStyle(cell) {
-  const box = getCellBox(cell, PRINT_SPEC.printWidthMm, PRINT_SPEC.printHeightMm)
+  const box = getStyledCellBox(cell, PRINT_SPEC.printWidthMm, PRINT_SPEC.printHeightMm)
   return {
     left: `${(box.x / PRINT_SPEC.printWidthMm) * 100}%`,
     top: `${(box.y / PRINT_SPEC.printHeightMm) * 100}%`,
     width: `${(box.w / PRINT_SPEC.printWidthMm) * 100}%`,
     height: `${(box.h / PRINT_SPEC.printHeightMm) * 100}%`,
+    borderRadius: boxRadiusPercent(box),
   }
 }
 
-function imageStyle(index) {
+function imageStyle(index, cell) {
   const transform = getSlotTransform(index)
+  const box = getStyledCellBox(cell, PRINT_SPEC.printWidthMm, PRINT_SPEC.printHeightMm)
+  const coverScale = rotationCoverScale(box.w, box.h, transform.rotation)
   return {
     objectPosition: `${transform.x}% ${transform.y}%`,
-    transform: `scale(${transform.scale})`,
+    transform: `scale(${transform.scale * coverScale}) rotate(${transform.rotation || 0}deg)`,
   }
 }
 
@@ -1430,6 +1487,25 @@ function setActiveZoom(value) {
     return
   }
   activeSlotTransform.value.scale = clamp(Number(value), 1, 3)
+}
+
+function setLayoutSpacing(value) {
+  layoutStyle.value.spacingMm = clamp(Number(value), 0, 6)
+}
+
+function setLayoutRadius(value) {
+  layoutStyle.value.borderRadiusMm = clamp(Number(value), 0, 10)
+}
+
+function setActiveRotation(value) {
+  if (!activeSlotTransform.value) {
+    return
+  }
+  activeSlotTransform.value.rotation = clamp(Number(value), -180, 180)
+}
+
+function formatRotation(value) {
+  return Math.round(Number(value || 0))
 }
 
 function resetActiveTransform() {
@@ -1514,6 +1590,23 @@ async function loadCanvasImage(url) {
   })
 }
 
+function addRoundedRectPath(ctx, x, y, width, height, radius) {
+  const safeRadius = Math.min(radius, width / 2, height / 2)
+  if (!safeRadius) {
+    ctx.rect(x, y, width, height)
+    return
+  }
+  ctx.moveTo(x + safeRadius, y)
+  ctx.lineTo(x + width - safeRadius, y)
+  ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius)
+  ctx.lineTo(x + width, y + height - safeRadius)
+  ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height)
+  ctx.lineTo(x + safeRadius, y + height)
+  ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius)
+  ctx.lineTo(x, y + safeRadius)
+  ctx.quadraticCurveTo(x, y, x + safeRadius, y)
+}
+
 function drawImageInBox(ctx, image, x, y, width, height, transform) {
   const boxRatio = width / height
   const imageRatio = image.naturalWidth / image.naturalHeight
@@ -1523,8 +1616,15 @@ function drawImageInBox(ctx, image, x, y, width, height, transform) {
   const cropHeight = baseCropHeight / transform.scale
   const sourceX = (image.naturalWidth - cropWidth) * (transform.x / 100)
   const sourceY = (image.naturalHeight - cropHeight) * (transform.y / 100)
+  const coverScale = rotationCoverScale(width, height, transform.rotation)
+  const drawWidth = width * coverScale
+  const drawHeight = height * coverScale
 
-  ctx.drawImage(image, sourceX, sourceY, cropWidth, cropHeight, x, y, width, height)
+  ctx.save()
+  ctx.translate(x + width / 2, y + height / 2)
+  ctx.rotate(((transform.rotation || 0) * Math.PI) / 180)
+  ctx.drawImage(image, sourceX, sourceY, cropWidth, cropHeight, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
+  ctx.restore()
 }
 
 async function renderComposite(pixelWidth = PRINT_SPEC.pixelWidth) {
@@ -1542,15 +1642,16 @@ async function renderComposite(pixelWidth = PRINT_SPEC.pixelWidth) {
 
   for (const [index, cell] of activeTemplate.value.cells.entries()) {
     const photo = getCellPhoto(index)
-    const boxMm = getCellBox(cell, PRINT_SPEC.printWidthMm, PRINT_SPEC.printHeightMm)
+    const boxMm = getStyledCellBox(cell, PRINT_SPEC.printWidthMm, PRINT_SPEC.printHeightMm)
     const x = boxMm.x * scaleX
     const y = boxMm.y * scaleY
     const width = boxMm.w * scaleX
     const height = boxMm.h * scaleY
+    const radius = Number(layoutStyle.value.borderRadiusMm || 0) * Math.min(scaleX, scaleY)
 
     ctx.save()
     ctx.beginPath()
-    ctx.rect(x, y, width, height)
+    addRoundedRectPath(ctx, x, y, width, height, radius)
     ctx.clip()
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(x, y, width, height)
@@ -1586,7 +1687,7 @@ async function downloadComposite() {
 }
 
 function buildLayoutRecord(thumbnailDataUrl) {
-  const layoutPhotoIds = Array.from(new Set(slotPhotoIds.value.filter(Boolean)))
+  const layoutPhotoIds = Array.from(new Set(selectedPhotoIds.value.filter(Boolean)))
   const layoutPhotos = layoutPhotoIds
     .map((id) => photos.value.find((photo) => photo.id === id))
     .filter(Boolean)
@@ -1598,6 +1699,7 @@ function buildLayoutRecord(thumbnailDataUrl) {
     templateId: activeTemplateId.value,
     templateName: activeTemplate.value.name,
     printSpec: PRINT_SPEC,
+    layoutStyle: { ...layoutStyle.value },
     selectedPhotoIds: layoutPhotoIds,
     slotPhotoIds: [...slotPhotoIds.value],
     slotTransforms: slotTransforms.value.map((transform) => ({ ...transform })),
@@ -1700,7 +1802,9 @@ async function restoreLayout(layoutItem) {
     scale: transform.scale || 1,
     x: transform.x ?? 50,
     y: transform.y ?? 50,
+    rotation: transform.rotation || 0,
   }))
+  layoutStyle.value = normalizeLayoutStyle(layout.layoutStyle)
   photos.value.forEach(loadImageSize)
   saveState.value = '已载入排版'
   layoutWallState.value = savedLayouts.value.length ? `${savedLayouts.value.length} 个排版` : '暂无排版'
@@ -2032,6 +2136,38 @@ async function restoreLayout(layoutItem) {
                 <span>当前图片</span>
                 <strong>{{ activeSlotPhoto ? activeSlotIndex + 1 : '-' }}</strong>
               </div>
+              <div class="fuji-adjust-panel">
+                <label>
+                  <span>模板间距 {{ layoutStyle.spacingMm.toFixed(1) }}mm</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="6"
+                    step="0.1"
+                    :value="layoutStyle.spacingMm"
+                    @input="setLayoutSpacing($event.target.value)"
+                  >
+                </label>
+                <label class="fuji-check-row">
+                  <input
+                    type="checkbox"
+                    :checked="layoutStyle.ignoreEdgeSpacing"
+                    @change="layoutStyle.ignoreEdgeSpacing = $event.target.checked"
+                  >
+                  <span>边缘</span>
+                </label>
+                <label>
+                  <span>图片圆角 {{ layoutStyle.borderRadiusMm.toFixed(1) }}mm</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    :value="layoutStyle.borderRadiusMm"
+                    @input="setLayoutRadius($event.target.value)"
+                  >
+                </label>
+              </div>
               <div v-if="activeSlotPhoto && activeSlotTransform" class="fuji-adjust-panel">
                 <strong>{{ activeSlotPhoto.name }}</strong>
                 <label>
@@ -2043,6 +2179,17 @@ async function restoreLayout(layoutItem) {
                     step="0.01"
                     :value="activeSlotTransform.scale"
                     @input="setActiveZoom($event.target.value)"
+                  >
+                </label>
+                <label>
+                  <span>旋转 {{ formatRotation(activeSlotTransform.rotation) }}°</span>
+                  <input
+                    type="range"
+                    min="-180"
+                    max="180"
+                    step="1"
+                    :value="activeSlotTransform.rotation || 0"
+                    @input="setActiveRotation($event.target.value)"
                   >
                 </label>
                 <div class="fuji-adjust-actions">
@@ -2096,7 +2243,7 @@ async function restoreLayout(layoutItem) {
                     v-if="getCellPhoto(index)"
                     :src="getCellPhoto(index).url"
                     :alt="getCellPhoto(index).name"
-                    :style="imageStyle(index)"
+                    :style="imageStyle(index, cell)"
                     draggable="false"
                   >
                   <span v-else>{{ getCellSourceIndex(cell, index) + 1 }}</span>
@@ -2944,6 +3091,16 @@ async function restoreLayout(layoutItem) {
 
 .fuji-adjust-panel input[type='range'] {
   width: 100%;
+  accent-color: #d9553d;
+}
+
+.fuji-adjust-panel .fuji-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fuji-adjust-panel .fuji-check-row input {
   accent-color: #d9553d;
 }
 
