@@ -2,47 +2,44 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const invitation = {
-  bride: '林予安',
-  groom: '何以辰',
-  dateLabel: '2026 年 10 月 18 日',
+  bride: '王婷婷',
+  groom: '何绪杰',
+  dateLabel: '2026 年 11 月 1 日',
   weekday: '星期日',
-  time: '16:30',
+  time: '12:08',
   ceremony: '户外证婚仪式',
-  banquet: '18:30 晚宴',
-  venue: '云栖湖畔礼堂',
-  address: '杭州市西湖区云栖路 88 号',
-  contact: '138 0000 0000',
-  targetDate: '2026-10-18T16:30:00+08:00',
+  banquet: '12:08 午宴',
+  venue: '寻山公馆1963',
+  address: '长沙市芙蓉区东湖街道滨河路东湖公园Herepark-B栋',
+  contact: '184731883882',
+  targetDate: '2026-11-01T04:08:00.000Z',
 }
 
 const highlights = [
   { label: '日期', value: invitation.dateLabel, meta: invitation.weekday },
   { label: '时间', value: invitation.time, meta: invitation.ceremony },
   { label: '地点', value: invitation.venue, meta: invitation.address },
-  { label: '晚宴', value: invitation.banquet, meta: '请于仪式前 20 分钟入场' },
+  { label: '午宴', value: invitation.banquet, meta: '请于仪式前 20 分钟入场' },
 ]
 
 const schedule = [
-  { time: '15:50', title: '宾客签到', detail: '迎宾区合影、领取席位卡' },
-  { time: '16:30', title: '证婚仪式', detail: '草坪仪式正式开始' },
-  { time: '17:20', title: '合影留念', detail: '亲友分组合影与自由拍照' },
-  { time: '18:30', title: '婚礼晚宴', detail: '入席用餐，举杯同庆' },
+  { time: '12:08', title: '宾客签到', detail: '迎宾区合影、领取席位卡' },
+  { time: '12:08', title: '证婚仪式', detail: '草坪仪式正式开始' },
+  { time: '12:08', title: '合影留念', detail: '亲友分组合影与自由拍照' },
+  { time: '12:08', title: '婚礼晚宴', detail: '入席用餐，举杯同庆' },
 ]
 
 const photoGallery = [
-  { src: '/wedding/photo-01.jpg', alt: '新娘手捧花婚纱照', size: 'large' },
-  { src: '/wedding/photo-02.jpg', alt: '新人戒指细节照', size: 'small' },
-  { src: '/wedding/photo-03.jpg', alt: '新人牵手婚纱照', size: 'small' },
-  { src: '/wedding/photo-04.jpg', alt: '户外婚礼仪式照', size: 'wide' },
-  { src: '/wedding/photo-05.jpg', alt: '婚礼会场窗景', size: 'tall' },
-  { src: '/wedding/photo-06.jpg', alt: '新人黑白婚纱照', size: 'tall' },
-  { src: '/wedding/photo-07.jpg', alt: '戒指与花束细节', size: 'small' },
-  { src: '/wedding/photo-08.jpg', alt: '新人旅行婚纱照', size: 'wide' },
-  { src: '/wedding/photo-09.jpg', alt: '婚礼标识细节', size: 'small' },
-  { src: '/wedding/photo-10.jpg', alt: '新娘捧花近景', size: 'tall' },
-  { src: '/wedding/photo-11.jpg', alt: '婚礼花亭布置', size: 'wide' },
-  { src: '/wedding/photo-12.jpg', alt: '山野新人婚纱照', size: 'wide' },
-  { src: '/wedding/photo-13.jpg', alt: '草坪宴会桌椅', size: 'small' },
+  { src: 'https://oss.person-common.top/wedding-picture/ZXYR1708.JPG', alt: '新娘手捧花婚纱照', size: 'large' },
+  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225803_46_1.jpg', alt: '新人戒指细节照', size: 'small' },
+  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225810_48_1.jpg', alt: '新人牵手婚纱照', size: 'small' },
+  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225819_50_1.jpg', alt: '户外婚礼仪式照', size: 'wide' },
+  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225822_51_1.jpg', alt: '婚礼会场窗景', size: 'tall' },
+  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225828_53_1.jpg', alt: '新人黑白婚纱照', size: 'tall' },
+  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225836_55_1.jpg', alt: '戒指与花束细节', size: 'small' },
+  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225815_49_1.jpg', alt: '新人旅行婚纱照', size: 'wide' },
+  { src: 'https://oss.person-common.top/wedding-picture/ZXYR1418.JPG', alt: '新娘捧花近景', size: 'tall' },
+  { src: 'https://oss.person-common.top/wedding-picture/ZXYR0572.JPG', alt: '婚礼花亭布置', size: 'wide' },
 ]
 
 const now = ref(Date.now())
@@ -79,14 +76,10 @@ onBeforeUnmount(() => {
     <section class="invite-hero" aria-labelledby="invite-title">
       <img
         class="invite-hero__image"
-        src="/wedding/photo-01.jpg"
+        src="https://oss.person-common.top/wedding-picture/ZXYR0467.JPG"
         alt="婚纱照背景"
       >
       <div class="invite-hero__shade" />
-      <nav class="invite-nav" aria-label="页面导航">
-        <RouterLink to="/" class="nav-link">返回首页</RouterLink>
-        <a href="#gallery" class="nav-link">婚纱照</a>
-      </nav>
       <div class="invite-hero__content">
         <p class="invite-kicker">Wedding Invitation</p>
         <h1 id="invite-title" class="invite-title">
@@ -100,7 +93,9 @@ onBeforeUnmount(() => {
         </p>
         <div class="invite-actions" aria-label="主要操作">
           <a href="#details" class="primary-action">查看婚礼信息</a>
-          <a :href="`tel:${invitation.contact.replaceAll(' ', '')}`" class="secondary-action">联系新人</a>
+          <nav class="invite-nav" aria-label="页面导航">
+            <a href="#gallery" class="nav-link">婚纱照</a>
+          </nav>
         </div>
       </div>
     </section>
@@ -149,7 +144,7 @@ onBeforeUnmount(() => {
           </p>
         </div>
         <figure class="story-photo">
-          <img src="/wedding/photo-08.jpg" alt="新人旅行婚纱照">
+          <img src="https://oss.person-common.top/wedding-picture/ZXYR1685.JPG" alt="新人旅行婚纱照">
         </figure>
       </div>
     </section>
@@ -177,7 +172,6 @@ onBeforeUnmount(() => {
         <div class="section-heading section-heading--center">
           <p class="section-kicker">Photos</p>
           <h2>婚纱照相册</h2>
-          <p>先放一组占位照片，后续替换成真实照片即可。</p>
         </div>
         <div class="photo-grid">
           <figure
@@ -207,9 +201,6 @@ onBeforeUnmount(() => {
             rel="noopener noreferrer"
           >
             打开地图
-          </a>
-          <a :href="`tel:${invitation.contact.replaceAll(' ', '')}`" class="secondary-action secondary-action--dark">
-            RSVP
           </a>
         </div>
       </div>
@@ -244,7 +235,7 @@ onBeforeUnmount(() => {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .invite-hero__shade {
@@ -256,7 +247,6 @@ onBeforeUnmount(() => {
 }
 
 .invite-nav {
-  position: absolute;
   z-index: 3;
   top: 24px;
   left: 24px;
@@ -526,7 +516,7 @@ onBeforeUnmount(() => {
 .story-photo img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
@@ -586,7 +576,7 @@ onBeforeUnmount(() => {
   margin: 0;
   overflow: hidden;
   border-radius: 8px;
-  background: #ddd5ca;
+  background: transparent;
 }
 
 .photo-tile--large {
@@ -606,7 +596,7 @@ onBeforeUnmount(() => {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   transition: transform 420ms ease;
 }
 
@@ -729,7 +719,7 @@ onBeforeUnmount(() => {
   }
 
   .photo-grid {
-    grid-auto-rows: 150px;
+    grid-auto-rows: 200px;
   }
 
   .photo-tile--large,
