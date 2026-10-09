@@ -41,8 +41,8 @@ const photoGallery = [
   { src: '/wedding-1/08.jpg', alt: '新人旅行婚纱照', orientation: 'portrait' },
   { src: '/wedding-1/09.JPG', alt: '新娘捧花近景', orientation: 'portrait' },
   { src: '/wedding-1/10.JPG', alt: '婚礼花亭布置', orientation: 'portrait' },
-  { src: '/wedding-1/11.JPG', alt: '新人相依婚纱照', orientation: 'portrait' },
-  { src: '/wedding-1/12.JPG', alt: '新人旅行横版合影', orientation: 'landscape' },
+  { src: '/wedding-1/13.jpg', alt: '新人相依婚纱照', orientation: 'portrait' },
+  // { src: '/wedding-1/12.JPG', alt: '新人旅行横版合影', orientation: 'landscape' },
 ]
 
 const now = ref(Date.now())
