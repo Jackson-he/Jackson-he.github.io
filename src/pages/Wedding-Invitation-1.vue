@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const invitation = {
   bride: '王婷婷',
@@ -29,17 +29,20 @@ const schedule = [
   { time: '12:08', title: '婚礼晚宴', detail: '入席用餐，举杯同庆' },
 ]
 
+// 01~11 为 3:4 竖图，12 为 4:3 横图，orientation 决定裁切时的取景位置
 const photoGallery = [
-  { src: 'https://oss.person-common.top/wedding-picture/ZXYR1708.JPG', alt: '新娘手捧花婚纱照', size: 'large' },
-  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225803_46_1.jpg', alt: '新人戒指细节照', size: 'small' },
-  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225810_48_1.jpg', alt: '新人牵手婚纱照', size: 'small' },
-  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225819_50_1.jpg', alt: '户外婚礼仪式照', size: 'wide' },
-  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225822_51_1.jpg', alt: '婚礼会场窗景', size: 'tall' },
-  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225828_53_1.jpg', alt: '新人黑白婚纱照', size: 'tall' },
-  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225836_55_1.jpg', alt: '戒指与花束细节', size: 'small' },
-  { src: 'https://oss.person-common.top/wedding-picture/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20261006225815_49_1.jpg', alt: '新人旅行婚纱照', size: 'wide' },
-  { src: 'https://oss.person-common.top/wedding-picture/ZXYR1418.JPG', alt: '新娘捧花近景', size: 'tall' },
-  { src: 'https://oss.person-common.top/wedding-picture/ZXYR0572.JPG', alt: '婚礼花亭布置', size: 'wide' },
+  { src: '/wedding-1/01.JPG', alt: '新娘手捧花婚纱照', orientation: 'portrait' },
+  { src: '/wedding-1/02.jpg', alt: '新人戒指细节照', orientation: 'portrait' },
+  { src: '/wedding-1/03.jpg', alt: '新人牵手婚纱照', orientation: 'portrait' },
+  { src: '/wedding-1/04.jpg', alt: '户外婚礼仪式照', orientation: 'portrait' },
+  { src: '/wedding-1/05.jpg', alt: '婚礼会场窗景', orientation: 'portrait' },
+  { src: '/wedding-1/06.jpg', alt: '新人黑白婚纱照', orientation: 'portrait' },
+  { src: '/wedding-1/07.jpg', alt: '戒指与花束细节', orientation: 'portrait' },
+  { src: '/wedding-1/08.jpg', alt: '新人旅行婚纱照', orientation: 'portrait' },
+  { src: '/wedding-1/09.JPG', alt: '新娘捧花近景', orientation: 'portrait' },
+  { src: '/wedding-1/10.JPG', alt: '婚礼花亭布置', orientation: 'portrait' },
+  { src: '/wedding-1/11.JPG', alt: '新人相依婚纱照', orientation: 'portrait' },
+  { src: '/wedding-1/12.JPG', alt: '新人旅行横版合影', orientation: 'landscape' },
 ]
 
 const now = ref(Date.now())
@@ -60,23 +63,148 @@ const countdown = computed(() => {
   ]
 })
 
-onMounted(() => {
+const lightboxIndex = ref(-1)
+const lightboxOpen = computed(() => lightboxIndex.value >= 0)
+const currentPhoto = computed(() => photoGallery[lightboxIndex.value] ?? null)
+let touchStartX = 0
+
+function openPhoto(index) {
+  lightboxIndex.value = index
+}
+
+function closePhoto() {
+  lightboxIndex.value = -1
+}
+
+function stepPhoto(delta) {
+  const total = photoGallery.length
+  lightboxIndex.value = (lightboxIndex.value + delta + total) % total
+}
+
+function handleKeydown(event) {
+  if (!lightboxOpen.value) return
+
+  if (event.key === 'Escape') closePhoto()
+  else if (event.key === 'ArrowRight') stepPhoto(1)
+  else if (event.key === 'ArrowLeft') stepPhoto(-1)
+}
+
+function handleTouchStart(event) {
+  touchStartX = event.changedTouches[0].clientX
+}
+
+function handleTouchEnd(event) {
+  const deltaX = event.changedTouches[0].clientX - touchStartX
+  if (Math.abs(deltaX) > 48) stepPhoto(deltaX < 0 ? 1 : -1)
+}
+
+watch(lightboxOpen, (open) => {
+  document.body.style.overflow = open ? 'hidden' : ''
+})
+
+const audioEl = ref(null)
+const isPlaying = ref(false)
+const userPaused = ref(false)
+let gestureUnlocked = false
+
+async function startMusic() {
+  const el = audioEl.value
+  if (!el) return false
+
+  try {
+    await el.play()
+    return true
+  } catch {
+    return false
+  }
+}
+
+function toggleMusic() {
+  const el = audioEl.value
+  if (!el) return
+
+  if (el.paused) {
+    userPaused.value = false
+    startMusic()
+  } else {
+    userPaused.value = true
+    el.pause()
+  }
+}
+
+// 浏览器会拦截自动播放，首次点击/触摸页面时再尝试启动
+function bindGestureUnlock() {
+  if (gestureUnlocked) return
+  gestureUnlocked = true
+
+  const unlock = async () => {
+    if (userPaused.value) return
+    const started = await startMusic()
+    if (started) removeUnlock()
+  }
+
+  const removeUnlock = () => {
+    gestureUnlocked = false
+    document.removeEventListener('click', unlock)
+    document.removeEventListener('touchstart', unlock)
+  }
+
+  document.addEventListener('click', unlock)
+  document.addEventListener('touchstart', unlock)
+}
+
+onMounted(async () => {
   timerId = window.setInterval(() => {
     now.value = Date.now()
   }, 1000)
+  window.addEventListener('keydown', handleKeydown)
+
+  if (audioEl.value) audioEl.value.volume = 0.55
+  const started = await startMusic()
+  if (!started) bindGestureUnlock()
 })
 
 onBeforeUnmount(() => {
   window.clearInterval(timerId)
+  window.removeEventListener('keydown', handleKeydown)
+  document.body.style.overflow = ''
+  audioEl.value?.pause()
 })
 </script>
 
 <template>
   <main class="wedding-invite">
+    <audio
+      ref="audioEl"
+      src="/wedding-1/bg-music.mp3"
+      loop
+      preload="auto"
+      @play="isPlaying = true"
+      @pause="isPlaying = false"
+    />
+
+    <button
+      type="button"
+      class="music-toggle"
+      :class="{ 'music-toggle--paused': !isPlaying }"
+      :aria-pressed="isPlaying"
+      :aria-label="isPlaying ? '暂停背景音乐' : '播放背景音乐'"
+      :title="isPlaying ? '暂停背景音乐' : '播放背景音乐'"
+      @click="toggleMusic"
+    >
+      <span class="music-toggle__disc" :class="{ 'is-spinning': isPlaying }" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M9 18V6.5l10-2V16" stroke-linecap="round" stroke-linejoin="round" />
+          <circle cx="6.5" cy="18" r="2.5" />
+          <circle cx="16.5" cy="16" r="2.5" />
+        </svg>
+      </span>
+    </button>
+
     <section class="invite-hero" aria-labelledby="invite-title">
       <img
         class="invite-hero__image"
-        src="https://oss.person-common.top/wedding-picture/ZXYR0467.JPG"
+        src="/wedding-1/09.JPG?url"
         alt="婚纱照背景"
       >
       <div class="invite-hero__shade" />
@@ -137,14 +265,17 @@ onBeforeUnmount(() => {
           <p class="section-kicker">Our Story</p>
           <h2>从相遇到并肩</h2>
           <p>
-            这些文字只是示例。你可以在这里写你们的相识、旅行、求婚、共同生活中的小片段，让收到请帖的人在翻看照片时，也读到属于你们的故事。
+            在漫长而平凡的日子里遇见彼此，从此所有的日常都有了回音。一起走过的街巷、看过的日落、说过的晚安，慢慢堆成了我们想共度一生的理由。
           </p>
           <p>
-            愿那天有花、有风、有亲友的笑声，也有你们最想留下的每一个瞬间。
+            我们没有轰轰烈烈的传奇，只有一份越相处越笃定的心意。往后的岁月里，想把清晨的第一缕光，和深夜的最后一盏灯，都留给同一个人。
+          </p>
+          <p>
+            谨以此日，敬邀你来到现场。愿有花、有风、有亲友的笑声，也有我们最想留下的每一个瞬间——和你一起。
           </p>
         </div>
         <figure class="story-photo">
-          <img src="https://oss.person-common.top/wedding-picture/ZXYR1685.JPG" alt="新人旅行婚纱照">
+          <img src="/wedding-1/12.JPG?url" alt="新人旅行婚纱照">
         </figure>
       </div>
     </section>
@@ -174,15 +305,20 @@ onBeforeUnmount(() => {
           <h2>婚纱照相册</h2>
         </div>
         <div class="photo-grid">
-          <figure
-            v-for="photo in photoGallery"
+          <button
+            v-for="(photo, index) in photoGallery"
             :key="photo.src"
+            type="button"
             class="photo-tile"
-            :class="`photo-tile--${photo.size}`"
+            :class="`photo-tile--${photo.orientation}`"
+            :aria-label="`查看大图：${photo.alt}`"
+            @click="openPhoto(index)"
           >
-            <img :src="photo.src" :alt="photo.alt" loading="lazy">
-          </figure>
+            <img :src="photo.src" :alt="photo.alt" loading="lazy" decoding="async">
+            <span class="photo-tile__zoom" aria-hidden="true">+</span>
+          </button>
         </div>
+        <p class="photo-hint">点击任意照片可查看大图</p>
       </div>
     </section>
 
@@ -210,6 +346,48 @@ onBeforeUnmount(() => {
       <p>{{ invitation.groom }} & {{ invitation.bride }}</p>
       <span>{{ invitation.dateLabel }} · {{ invitation.venue }}</span>
     </footer>
+
+    <Teleport to="body">
+      <Transition name="lightbox">
+        <div
+          v-if="lightboxOpen && currentPhoto"
+          class="lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="婚纱照大图预览"
+          @click.self="closePhoto"
+          @touchstart.passive="handleTouchStart"
+          @touchend.passive="handleTouchEnd"
+        >
+          <button type="button" class="lightbox__close" aria-label="关闭大图" @click="closePhoto">
+            ×
+          </button>
+          <button
+            type="button"
+            class="lightbox__nav lightbox__nav--prev"
+            aria-label="上一张"
+            @click="stepPhoto(-1)"
+          >
+            ‹
+          </button>
+          <figure class="lightbox__figure">
+            <img :src="currentPhoto.src" :alt="currentPhoto.alt">
+            <figcaption>
+              {{ currentPhoto.alt }}
+              <span>{{ lightboxIndex + 1 }} / {{ photoGallery.length }}</span>
+            </figcaption>
+          </figure>
+          <button
+            type="button"
+            class="lightbox__nav lightbox__nav--next"
+            aria-label="下一张"
+            @click="stepPhoto(1)"
+          >
+            ›
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
   </main>
 </template>
 
@@ -219,6 +397,75 @@ onBeforeUnmount(() => {
   background: #f8f5f0;
   color: #26302a;
   font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.music-toggle {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1000;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(38, 48, 42, 0.16);
+  border-radius: 50%;
+  background: rgba(255, 253, 248, 0.92);
+  color: #26302a;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgba(20, 26, 20, 0.18);
+  backdrop-filter: blur(10px);
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.music-toggle:hover {
+  transform: translateY(-2px);
+  background: #fffdf8;
+}
+
+.music-toggle:focus-visible {
+  outline: 2px solid #b79b68;
+  outline-offset: 2px;
+}
+
+.music-toggle__disc {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+}
+
+.music-toggle__disc svg {
+  width: 100%;
+  height: 100%;
+}
+
+.music-toggle__disc.is-spinning {
+  animation: music-spin 3.4s linear infinite;
+}
+
+@keyframes music-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.music-toggle--paused .music-toggle__disc {
+  opacity: 0.5;
+}
+
+.music-toggle--paused::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 26px;
+  height: 1.5px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.6;
+  transform: rotate(-45deg);
 }
 
 .invite-hero {
@@ -516,7 +763,7 @@ onBeforeUnmount(() => {
 .story-photo img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
 }
 
@@ -564,44 +811,172 @@ onBeforeUnmount(() => {
   background: #f8f5f0;
 }
 
+.gallery-band .section-inner {
+  width: min(1400px, calc(100% - 48px));
+}
+
 .photo-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-auto-rows: 170px;
-  grid-auto-flow: dense;
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
 }
 
 .photo-tile {
+  position: relative;
+  display: block;
   margin: 0;
-  overflow: hidden;
+  padding: 0;
+  border: 0;
   border-radius: 8px;
-  background: transparent;
-}
-
-.photo-tile--large {
-  grid-column: span 2;
-  grid-row: span 2;
-}
-
-.photo-tile--wide {
-  grid-column: span 2;
-}
-
-.photo-tile--tall {
-  grid-row: span 2;
+  overflow: hidden;
+  background: #efe9e0;
+  aspect-ratio: 3 / 4;
+  cursor: pointer;
 }
 
 .photo-tile img {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center 30%;
   transition: transform 420ms ease;
 }
 
-.photo-tile:hover img {
-  transform: scale(1.04);
+.photo-tile--landscape img {
+  object-position: center;
+}
+
+.photo-tile:hover img,
+.photo-tile:focus-visible img {
+  transform: scale(1.05);
+}
+
+.photo-tile:focus-visible {
+  outline: 2px solid #b79b68;
+  outline-offset: 2px;
+}
+
+.photo-tile__zoom {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(20, 24, 20, 0.42);
+  color: #fffaf2;
+  font-size: 1.3rem;
+  line-height: 1;
+  opacity: 0;
+  backdrop-filter: blur(6px);
+  transition: opacity 200ms ease;
+}
+
+.photo-tile:hover .photo-tile__zoom,
+.photo-tile:focus-visible .photo-tile__zoom {
+  opacity: 1;
+}
+
+.photo-hint {
+  margin: 22px 0 0;
+  color: #657066;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: rgba(12, 16, 13, 0.92);
+  backdrop-filter: blur(6px);
+}
+
+.lightbox__figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: min(1100px, 100%);
+}
+
+.lightbox__figure img {
+  display: block;
+  max-width: 100%;
+  max-height: 82svh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.lightbox__figure figcaption {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255, 250, 242, 0.82);
+  font-size: 0.92rem;
+}
+
+.lightbox__figure figcaption span {
+  color: #b79b68;
+}
+
+.lightbox__close,
+.lightbox__nav {
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 250, 242, 0.28);
+  border-radius: 50%;
+  background: rgba(20, 24, 20, 0.4);
+  color: #fffaf2;
+  cursor: pointer;
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.lightbox__close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.lightbox__nav {
+  width: 48px;
+  height: 48px;
+  font-size: 2rem;
+  line-height: 1;
+  padding-bottom: 4px;
+}
+
+.lightbox__close:hover,
+.lightbox__nav:hover {
+  background: rgba(213, 183, 120, 0.9);
+  color: #20261f;
+  transform: translateY(-1px);
+}
+
+.lightbox-enter-active,
+.lightbox-leave-active {
+  transition: opacity 220ms ease;
+}
+
+.lightbox-enter-from,
+.lightbox-leave-to {
+  opacity: 0;
 }
 
 .venue-band {
@@ -718,15 +1093,43 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr 1fr;
   }
 
-  .photo-grid {
-    grid-auto-rows: 200px;
+  .music-toggle {
+    right: 14px;
+    bottom: 14px;
+    width: 44px;
+    height: 44px;
   }
 
-  .photo-tile--large,
-  .photo-tile--wide,
-  .photo-tile--tall {
-    grid-column: span 1;
-    grid-row: span 1;
+  .gallery-band .section-inner {
+    width: min(100% - 32px, 1400px);
+  }
+
+  .photo-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .lightbox {
+    padding: 12px;
+  }
+
+  .lightbox__figure img {
+    max-height: 72svh;
+  }
+
+  .lightbox__nav {
+    position: absolute;
+    bottom: 20px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .lightbox__nav--prev {
+    left: 20px;
+  }
+
+  .lightbox__nav--next {
+    right: 20px;
   }
 
   .schedule-item {
