@@ -193,7 +193,7 @@ const routes = [
     component: InvitationPage,
     meta: {
       title: '婚礼请帖',
-      description: '何以辰与林予安的婚礼请帖，包含婚礼信息、当天流程和婚纱照相册。',
+      description: '何绪杰&王婷婷的婚礼请帖',
       sharePath: '/invitation-1/',
       image: `${SITE_URL}/wedding/photo-01.jpg`,
     },
